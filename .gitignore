@@ -1,3 +1,6 @@
 env
 experimental
 master/private.json
+master/guild_data.json
+master/user_data.json
+*__pycache__
