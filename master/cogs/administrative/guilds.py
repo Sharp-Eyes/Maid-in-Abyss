@@ -2,8 +2,9 @@ import discord
 from discord.ext import commands
 import json
 
-from main import DATA_PATH, DEFAULT_PREFIX
+from main import DEFAULT_PREFIX
 from utils.helpers import deep_update
+from utils.classes import Paths
 
 
 class Guild_Cog(commands.Cog):
@@ -20,7 +21,6 @@ class Guild_Cog(commands.Cog):
     async def base_prefix(self, ctx: commands.Context):
         print(ctx.invoked_subcommand)
 
-        
 
 
     @base_prefix.command(
@@ -32,7 +32,7 @@ class Guild_Cog(commands.Cog):
         # DMs
         if not guild: return await ctx.send("This command can only be used inside a guild.")
 
-        with open(DATA_PATH, "r+") as file:
+        with open(Paths.guild_data, "r+") as file:
             data = json.load(file)
             new = {str(guild.id): {"prefix": prefixes}}
             deep_update(data, new)
@@ -46,7 +46,6 @@ class Guild_Cog(commands.Cog):
         
 
 
-
     @base_prefix.command(
         name = "get"
     )
@@ -54,7 +53,7 @@ class Guild_Cog(commands.Cog):
 
         guild: discord.Guild = ctx.guild
 
-        with open(DATA_PATH, "r") as file:
+        with open(Paths.guild_data, "r") as file:
             data = json.load(file)
             guild_data = data.get(str(guild.id), dict())
             prefixes = guild_data.get("prefix", DEFAULT_PREFIX)
