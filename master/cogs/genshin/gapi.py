@@ -140,7 +140,7 @@ class Genshin_API_Claimer(Genshin_API):
         """Get a list of guild IDs to which a user is subscribed."""
 
         user_data = self.read_user_data()
-        return user_data.get(str(user_id), {}).get("Genshin_Impact", {}).get("gapi_notification_guilds", [])
+        return user_data.get(str(user_id), {}).get("Genshin_Impact", {}).get("gapi_notification_guilds") or []
 
 
     def get_user_cookies(self, user_id: Union[int, str], individual_user_data: dict = None) -> dict[str, str]:
@@ -409,7 +409,6 @@ class Genshin_API_Cog(commands.Cog, Genshin_API_Claimer):
 
         channel = self.get_guild_notif_channel(ctx.guild_id)
         guilds = self.get_user_notif_guilds(ctx.author_id)
-        print("g", guilds)
         if not channel:
             return await ctx.send(
                 f"**{ctx.guild.name}** does not appear to have a notification channel set up. Please contact an "
