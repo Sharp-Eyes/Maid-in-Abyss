@@ -9,6 +9,14 @@ from discord_slash import SlashCommand
 from utils.helpers import search_all_extensions
 from utils.classes import Paths
 
+import logging
+logging.basicConfig(level=logging.NOTSET)
+
+dpy_logger = logging.getLogger("discord")
+dpy_logger.setLevel(logging.ERROR)
+
+ds_logger = logging.getLogger("discord_slash")
+ds_logger.setLevel(logging.WARN)
 
 # Type aliases
 ExtensionError = commands.errors.ExtensionError

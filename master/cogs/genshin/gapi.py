@@ -10,7 +10,6 @@ from discord_slash import cog_ext, SlashContext
 from discord_slash.utils.manage_commands import create_option
 
 import aiohttp, json
-from logging import Logger
 import string, hashlib
 
 from numpy import array, random
@@ -21,8 +20,8 @@ import datetime, pytz
 from utils.helpers import deep_update_json
 from utils.classes import Paths
 
-
-logger = Logger("GAPI")
+import logging
+logger = logging.getLogger("GAPI")
 
 
 # Predetermine guilds for local slash commands
@@ -55,7 +54,7 @@ HEADERS = {
     "user-agent": USER_AGENT
 }
 
-DAILY_CLAIM_TIME = datetime.time.fromisoformat("18:00:02")#.replace(tzinfo = datetime.timezone.utc)
+DAILY_CLAIM_TIME = datetime.time.fromisoformat("16:00:02")  # UTC
 
 
 
@@ -162,14 +161,15 @@ class Genshin_API_Claimer(Genshin_API):
 
     # Claim logic
 
-    __str__already_claimed = "{0.mention}, it appears your rewards have already been claimed today. Don't forget to collect them in-game!"
-    __str__claim_success = "{0}, I have successfully claimed your daily login rewards from Hoyolab! Don't forget to collect them in-game!"
-    __str__claim_fail = "{0}, something went awry in trying to claim your daily login rewards. Please see your DMs for further information. I apologize for the inconvenience!"
+    __str__no_cookies = "{}, I have not been authorized to claim your login rewards. Please see `/gapi howto` and `/gapi auth`."
+    __str__already_claimed = "{}, it appears your rewards have already been claimed today. Don't forget to collect them in-game!"
+    __str__claim_success = "{}, I have successfully claimed your daily login rewards from Hoyolab! Don't forget to collect them in-game!"
+    __str__claim_fail = "{}, something went awry in trying to claim your daily login rewards. Please see your DMs for further information. I apologize for the inconvenience!"
 
     __NoCookies = object()
     __AlreadyClaimed = object()
     __ClaimSuccess = object()
-    __ClaimFailed = object()
+    __ClaimFail = object()
 
     async def claim_daily_reward(
         self, *,
@@ -188,7 +188,7 @@ class Genshin_API_Claimer(Genshin_API):
 
         Returns:
         --------
-        object: Union[:class:`__NoCookies`, :class:`__AlreadyClaimed`, :class:`__ClaimFailed`, :class:`__ClaimSuccess`]
+        object: Union[:class:`__NoCookies`, :class:`__AlreadyClaimed`, :class:`__ClaimFail`, :class:`__ClaimSuccess`]
             a sentinel value to propagate the request state through to the calling function.
             The names should be self-explanatory.
         """
@@ -213,22 +213,23 @@ class Genshin_API_Claimer(Genshin_API):
             claim_data = {str(user.id): {"Genshin_Impact": {"latest_claim": today}}}
             deep_update_json(Paths.user_data, claim_data)
 
+
         try:
             await self.daily_claim_status(cookies=auth_cookies)
         except CommandError as e:
-            logger.log(0, f"Auto-login failed for user {user.id}: {e}")
+            logger.log(1, f"Auto-login failed for user {user.id}: {e}")
             update_latest_claim(self.get_API_date())
             return self.__AlreadyClaimed
         
         # Try claiming
         try:
-            response = await self.daily_claim_exec(cookies=auth_cookies)
-            update_latest_claim(response["today"])
+            await self.daily_claim_exec(cookies=auth_cookies)
+            update_latest_claim(self.get_API_date())
             return self.__ClaimSuccess
 
         except CommandError as e:
-            logger.warning(f"Auto-login failed for user {user.id}: {e}")
-            return self.__ClaimFailed
+            logger.log(1, f"Auto-login failed for user {user.id}: {e}")
+            return self.__ClaimFail
 
 
     # Claim slashcommand
@@ -248,31 +249,30 @@ class Genshin_API_Claimer(Genshin_API):
         )
 
         if response is self.__NoCookies:
-            pass
+            return await ctx.send(self.__str__no_cookies.format(ctx.author.mention), hidden=True)
         elif response is self.__AlreadyClaimed:
-            return await ctx.send(self.__str__already_claimed.format(ctx.author))
-        elif response is self.__ClaimFailed:
-            return await ctx.send(self.__str__claim_fail.format(ctx.author.mention))
+            return await ctx.send(self.__str__already_claimed.format(ctx.author.mention), hidden=True)
+        elif response is self.__ClaimFail:
+            return await ctx.send(self.__str__claim_fail.format(ctx.author.mention), hidden=True)
         else:
-            return await ctx.send(self.__str__claim_success.format(ctx.author.mention))
-
+            return await ctx.send(self.__str__claim_success.format(ctx.author.mention), hidden=True)
 
 
     # Autoclaim
 
     @tasks.loop(time=[DAILY_CLAIM_TIME])
     async def gapi_claim_daily(self):
-        print("claiming daily stuffs")
+        logger.log(1, "claiming daily stuffs")
 
         user_data = self.read_user_data()
         succeeded = DefaultDict(list[discord.User])
         failed = DefaultDict(list[discord.User])
 
         def on_no_cookies(guilds: list[int], user: discord.User):
-            print(f"No cookies: {user.name}")
+            logger.log(1, f"[Autoclaim] User {user.name} did not specify their cookies.")
 
         def on_already_claimed(guilds: list[int], user: discord.User):
-            print(f"Already claimed: {user.name}")
+            logger.log(1, f"[Autoclaim] User {user.name} already claimed their rewards.")
         
         def on_claim_failed(guilds: list[int], user: discord.User):
             for guild in guilds:
@@ -285,15 +285,11 @@ class Genshin_API_Claimer(Genshin_API):
         state = {
             self.__NoCookies: on_no_cookies,
             self.__AlreadyClaimed: on_already_claimed,
-            self.__ClaimFailed: on_claim_failed,
+            self.__ClaimFail: on_claim_failed,
             self.__ClaimSuccess: on_claim_success
         }
 
         for user_id, data in user_data.items():
-            cookies = self.get_user_cookies(user_id, data)
-            if not cookies:
-                continue
-
             guilds = self.get_user_notif_guilds(user_id)
             user: discord.User = self.bot.get_user(int(user_id))
             response = await self.claim_daily_reward(
@@ -325,7 +321,8 @@ class Genshin_API_Claimer(Genshin_API):
 
         # Try to claim before daily reset on cog load in case we missed a day
         if datetime.datetime.utcnow().time() < DAILY_CLAIM_TIME:
-            await self.gapi_claim_daily()
+           await self.gapi_claim_daily()
+        pass
 
 
 
