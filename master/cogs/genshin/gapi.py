@@ -1,24 +1,25 @@
 # Credits for api reverse-engineering go to TheSadru.
 # See https://github.com/thesadru/genshinstats/ for their work.
 
-import json
-from typing import DefaultDict, Union
+
+
 import discord
 from discord.ext import commands, tasks
+from discord.ext.commands.errors import CommandError
 from discord_slash import cog_ext, SlashContext
 from discord_slash.utils.manage_commands import create_option
 
-import aiohttp
-from numpy import array, random
-
-import datetime
-from discord.ext.commands.errors import CommandError
+import aiohttp, json
+from logging import Logger
 import string, hashlib
+
+from numpy import array, random
+from typing import DefaultDict, Union
+
+import datetime, pytz
 
 from utils.helpers import deep_update_json
 from utils.classes import Paths
-
-from logging import Logger
 
 
 logger = Logger("GAPI")
@@ -42,7 +43,6 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 
 OS_URL = "https://hk4e-api-os.mihoyo.com/event/sol/"
 OS_ACT_ID = "e202102251931481"
-DAILY_CLAIM_TIME = datetime.time.fromisoformat("18:00:02").replace(tzinfo = datetime.timezone.utc)
 
 HEADERS = {
     # required headers
@@ -55,12 +55,12 @@ HEADERS = {
     "user-agent": USER_AGENT
 }
 
+DAILY_CLAIM_TIME = datetime.time.fromisoformat("18:00:02")#.replace(tzinfo = datetime.timezone.utc)
 
 
 
 class Genshin_API:
     """Class that organizes a couple helper functions for API calls"""
-
 
     def generate_ds_token(salt: str = DS_SALT) -> str:
         """Creates a new ds token for authentication."""
@@ -68,6 +68,13 @@ class Genshin_API:
         r = ''.join(random.choice(list(string.ascii_letters), 6))  # 6 random chars
         h = hashlib.md5(f"salt={salt}&t={t}&r={r}".encode()).hexdigest()  # hash and get hex
         return f'{t},{r},{h}'
+
+    
+    def get_API_datetime(self):
+        return datetime.datetime.now(pytz.timezone("Asia/Shanghai"))
+        
+    def get_API_date(self):
+        return self.get_API_datetime().strftime("%Y-%m-%d")
 
 
     async def fetch_endpoint(self, endpoint_url, *, request_type="get", cookies = None, **params):
@@ -103,40 +110,234 @@ class Genshin_API:
         return response
 
 
-
-
-
-class Genshin_API_Cog(commands.Cog, Genshin_API):
-
+class Genshin_API_Claimer(Genshin_API):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
         self.gapi_claim_daily.start()
 
 
+    # Helper functions
 
     def read_guild_data(self) -> dict:
         with open(Paths.guild_data) as guild_file:
             return json.load(guild_file)
 
+
     def read_user_data(self) -> dict:
         with open(Paths.user_data) as user_file:
             return json.load(user_file)
 
+
     def get_guild_notif_channel(self, guild_id) -> int:
-        """Return the channel ID to which the current guild sends its gapi notifications"""
+        """Get the channel ID to which the current guild sends its gapi notifications."""
+
         guild_data = self.read_guild_data()
         return guild_data.get(str(guild_id), {}).get("Genshin_Impact", {}).get("gapi_notification_channel")
 
 
     def get_user_notif_guilds(self, user_id) -> list[int]:
-        """Return a list of guild IDs to which a user is subscribed"""
+        """Get a list of guild IDs to which a user is subscribed."""
+
         user_data = self.read_user_data()
         return user_data.get(str(user_id), {}).get("Genshin_Impact", {}).get("gapi_notification_guilds", [])
 
 
+    def get_user_cookies(self, user_id: Union[int, str], individual_user_data: dict = None) -> dict[str, str]:
+        """Get the cookies of the user with the given ID. Returns none if this user was not found.
+        If not provided with individual_user_data, it will read user_data.json instead.
 
+        Parameters:
+        -----------
+        user_id: Union[:class:`int`, :class:`str`]
+            the Discord UID of the target user.
+        individual_user_data: :class:`dict`
+            the user data of *one* individual user, as obtained from user_data.json.
+        """
+        
+        if individual_user_data is None:
+            individual_user_data = self.read_user_data().get(str(user_id), {})
+        return individual_user_data.get("Genshin_Impact", {}).get("auth_cookies")
+
+
+    # Claim logic
+
+    __str__already_claimed = "{0.mention}, it appears your rewards have already been claimed today. Don't forget to collect them in-game!"
+    __str__claim_success = "{0}, I have successfully claimed your daily login rewards from Hoyolab! Don't forget to collect them in-game!"
+    __str__claim_fail = "{0}, something went awry in trying to claim your daily login rewards. Please see your DMs for further information. I apologize for the inconvenience!"
+
+    __NoCookies = object()
+    __AlreadyClaimed = object()
+    __ClaimSuccess = object()
+    __ClaimFailed = object()
+
+    async def claim_daily_reward(
+        self, *,
+        user: Union[discord.Member, discord.User],
+        individual_data: dict,
+    ) -> object:
+        """Claim Hoyolab daily rewards by making the proper API calls.
+        
+        Parameters:
+        -----------
+        user: :class:`discord.Member`
+            the user whose rewards we are attempting to claim.
+        individual_data: :class:`dict`
+            a dict that holds a single user's user_data. This is derived from user_data.json,
+            by selecting a single top-level entry (user).
+
+        Returns:
+        --------
+        object: Union[:class:`__NoCookies`, :class:`__AlreadyClaimed`, :class:`__ClaimFailed`, :class:`__ClaimSuccess`]
+            a sentinel value to propagate the request state through to the calling function.
+            The names should be self-explanatory.
+        """
+
+        # Technically we can get the auth_cookies from only the user object, but for auto-login that would mean:
+        #  1) read user_data.json, loop over each user_id and their data (contains auth_cookies),
+        #  2) construct a discord.User from the user_id,
+        #  3) enter the discord.User into this function,
+        #  4) read user_data.json again and use the discord.User object to get the correct auth_cookies.
+        # This means we'd have to open the same json twice, which seems a bit dumb. I'd rather just pass in the cookies, as that would mean only reading the json once in either case.
+
+        auth_cookies = self.get_user_cookies(user.id)
+        if not auth_cookies:
+            return self.__NoCookies
+
+        # Check claim status
+        latest_claim = individual_data.get("Genshin_Impact", {}).get("latest_claim")
+        if latest_claim == self.get_API_date(): # latest claim was "today"
+            return self.__AlreadyClaimed
+
+        def update_latest_claim(today):
+            claim_data = {str(user.id): {"Genshin_Impact": {"latest_claim": today}}}
+            deep_update_json(Paths.user_data, claim_data)
+
+        try:
+            await self.daily_claim_status(cookies=auth_cookies)
+        except CommandError as e:
+            logger.log(0, f"Auto-login failed for user {user.id}: {e}")
+            update_latest_claim(self.get_API_date())
+            return self.__AlreadyClaimed
+        
+        # Try claiming
+        try:
+            response = await self.daily_claim_exec(cookies=auth_cookies)
+            update_latest_claim(response["today"])
+            return self.__ClaimSuccess
+
+        except CommandError as e:
+            logger.warning(f"Auto-login failed for user {user.id}: {e}")
+            return self.__ClaimFailed
+
+
+    # Claim slashcommand
+
+    @cog_ext.cog_subcommand(
+        base="gapi",
+        name="claim",
+        description="Claim your daily login rewards. Will only work after authorizing with /gapi auth.",
+        guild_ids=guilds
+    )
+    async def gapi_claim(self, ctx: SlashContext):
+        individual_data = self.read_user_data().get(str(ctx.author_id), {})
+
+        response = await self.claim_daily_reward(
+            user=ctx.author,
+            individual_data=individual_data
+        )
+
+        if response is self.__NoCookies:
+            pass
+        elif response is self.__AlreadyClaimed:
+            return await ctx.send(self.__str__already_claimed.format(ctx.author))
+        elif response is self.__ClaimFailed:
+            return await ctx.send(self.__str__claim_fail.format(ctx.author.mention))
+        else:
+            return await ctx.send(self.__str__claim_success.format(ctx.author.mention))
+
+
+
+    # Autoclaim
+
+    @tasks.loop(time=[DAILY_CLAIM_TIME])
+    async def gapi_claim_daily(self):
+        print("claiming daily stuffs")
+
+        user_data = self.read_user_data()
+        succeeded = DefaultDict(list[discord.User])
+        failed = DefaultDict(list[discord.User])
+
+        def on_no_cookies(guilds: list[int], user: discord.User):
+            print(f"No cookies: {user.name}")
+
+        def on_already_claimed(guilds: list[int], user: discord.User):
+            print(f"Already claimed: {user.name}")
+        
+        def on_claim_failed(guilds: list[int], user: discord.User):
+            for guild in guilds:
+                failed[guild].append(user)
+        
+        def on_claim_success(guilds: list[int], user: discord.User):
+            for guild in guilds:
+                succeeded[guild].append(user)
+
+        state = {
+            self.__NoCookies: on_no_cookies,
+            self.__AlreadyClaimed: on_already_claimed,
+            self.__ClaimFailed: on_claim_failed,
+            self.__ClaimSuccess: on_claim_success
+        }
+
+        for user_id, data in user_data.items():
+            cookies = self.get_user_cookies(user_id, data)
+            if not cookies:
+                continue
+
+            guilds = self.get_user_notif_guilds(user_id)
+            user: discord.User = self.bot.get_user(int(user_id))
+            response = await self.claim_daily_reward(
+                user=user,
+                individual_data=data
+            )
+
+            # Call the function corresponding to the correct response
+            state[response](guilds, user)
+
+
+        for guild_id, users in succeeded.items():
+            channel_id = self.get_guild_notif_channel(guild_id)
+            channel = self.bot.get_channel(channel_id)
+            user_str = ", ".join(u.mention for u in users)
+
+            await channel.send(self.__str__claim_success.format(user_str))
+
+        for guild_id, users in failed.items():
+            channel_id = self.get_guild_notif_channel(guild_id)
+            channel = self.bot.get_channel(channel_id)
+            user_str = ", ".join(u.mention for u in users)
+
+            await channel.send(self.__str__claim_fail.format(user_str))
+            
+
+    @gapi_claim_daily.before_loop
+    async def gapi_claim_daily_setup(self):
+
+        # Try to claim before daily reset on cog load in case we missed a day
+        if datetime.datetime.utcnow().time() < DAILY_CLAIM_TIME:
+            await self.gapi_claim_daily()
+
+
+
+class Genshin_API_Cog(commands.Cog, Genshin_API_Claimer):
+
+
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        super().__init__(bot)
+
+
+    # Notification subscription management
 
     @cog_ext.cog_subcommand(
         base="gapi",
@@ -286,6 +487,7 @@ class Genshin_API_Cog(commands.Cog, Genshin_API):
         )
 
 
+    # Basic functionality for which idk how to employ slash commands yet.
 
     @commands.group(
         name = "genshin_api",
@@ -315,119 +517,6 @@ class Genshin_API_Cog(commands.Cog, Genshin_API):
         self.bot.reload_extension(self.__module__)
         new_cog: Genshin_API_Cog = self.bot.get_cog(self.qualified_name)
         new_cog.gapi_notif = self.gapi_notif
-
-
-
-    @gapi_main.command(
-        name = "claim"
-    )
-    async def gapi_claim(self, ctx: commands.Context):
-
-        NotAuthed = CommandError(f"{ctx.author.mention}, it appears you have not yet authorized me to claim your daily rewards. Please see `/gapi howto` and `/gapi auth`.")
-
-        user_data = self.read_user_data()
-        current_user_data = user_data.get(str(ctx.author.id))
-        if not current_user_data: raise NotAuthed
-        
-        cookies = current_user_data["Genshin_Impact"].get("auth_cookies")
-        if not cookies: raise NotAuthed
-
-
-        # TODO: abstract error handling away to a centralized error handler
-        try:
-            await self.daily_claim_status(cookies)
-        except CommandError as e:
-            return await ctx.send(e)
-
-        try:
-            await self.daily_claim_exec(cookies)
-        except CommandError as e:
-            return await ctx.send(e)
-
-        await ctx.send(f"{ctx.author.mention}, I have successfully claimed your daily login rewards from Hoyolab! Please claim your rewards in-game.")
-
-
-    # Autoclaim
-
-    __str__already_claimed = "{0.mention}, it appears your rewards have already been claimed today. Don't forget to collect them in-game!"
-    __str__claim_success = "{0}, I have successfully claimed your daily login rewards from Hoyolab! Don't forget to collect them in-game!"
-    __str__claim_fail = "{0}, something went awry in trying to claim your daily login rewards. Please see your DMs for further information. I apologize for the inconvenience!"
-
-    @tasks.loop(time=[DAILY_CLAIM_TIME])
-    async def gapi_claim_daily(self):
-        print("claiming daily stuffs")
-
-        user_data = self.read_user_data()
-        succeeded = DefaultDict(list)
-        failed = DefaultDict(list)
-
-        for user_id, data in user_data.items():
-
-            guilds = self.get_user_notif_guilds(user_id)
-            user_id = int(user_id)
-
-            cookies = data.get("Genshin_Impact", {}).get("auth_cookies")
-            if not any(cookies.values()):
-                continue
-
-            user: discord.User = self.bot.get_user(user_id)
-
-            # Check claim status
-            try:
-                await self.daily_claim_status(cookies=cookies)
-            except CommandError as e:
-
-                if not guilds:
-                    await user.send(self.__str__already_claimed.format(user))
-                    continue
-
-                for guild in guilds:
-                    failed[guild].append(user)
-                continue
-            
-            # Try claiming
-            try:
-                await self.daily_claim_exec(cookies=cookies)
-                
-                if not guilds:
-                    await user.send(self.__str__claim_success.format(user.mention))
-                    continue
-                
-                for guild in guilds:
-                    succeeded[guild].append(user)
-
-            except CommandError as e:
-                logger.warning(f"Daily claiming failed for user {user.id}: {e}")
-                
-                if not guilds:
-                    await user.send(self.__str__claim_fail.format(user.mention))
-                    continue
-
-                for guild in guilds:
-                    failed[guild].append(user)
-                continue
-
-        for guild_id, users in succeeded.items():
-            channel_id = self.get_guild_notif_channel(guild_id)
-            channel = self.bot.get_channel(channel_id)
-            user_str = ", ".join(u.mention for u in users)
-
-            await channel.send(self.__str__claim_success.format(user_str))
-
-        for guild_id, users in failed.items():
-            channel_id = self.get_guild_notif_channel(guild_id)
-            channel = self.bot.get_channel(channel_id)
-            user_str = ", ".join(u.mention for u in users)
-
-            await channel.send(self.__str__claim_fail.format(user_str))
-            
-
-    @gapi_claim_daily.before_loop
-    async def gapi_claim_daily_setup(self):
-
-        # Try to claim before daily reset on cog load in case we missed a day
-        if datetime.datetime.utcnow().time < DAILY_CLAIM_TIME:
-            await self.gapi_claim_daily()
 
 
 
