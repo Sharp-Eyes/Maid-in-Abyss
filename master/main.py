@@ -49,11 +49,11 @@ if __name__ == "__main__":
         command_prefix=get_prefix,
         intents = intents
     )
-    slash = SlashCommand(bot, sync_commands=True, sync_on_cog_reload=True) # Declares slash commands through the client.
+    slash = SlashCommand(bot, sync_on_cog_reload=True) # Declares slash commands through the client.
 
     @bot.event
     async def on_ready():
-        print(f"\n\nLogged in as {bot.user.name} | Dpy version {discord.__version__}")
+        print(f"\n\nLogged in as {bot.user.name} | discord.py version {discord.__version__}")
         
         # Load or reload extensions, whichever is appropriate
         if not bot.extensions:
@@ -74,6 +74,8 @@ if __name__ == "__main__":
 
         print(f"\n> Encountered {exceptions} exceptions in loading cogs.")
         await slash.sync_all_commands()
+
+
             
 
 
