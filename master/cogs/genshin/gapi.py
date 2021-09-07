@@ -1,6 +1,8 @@
 # Credits for api reverse-engineering go to TheSadru.
 # See https://github.com/thesadru/genshinstats/ for their work.
 
+# TODO: cancel task on disconnect if possible
+
 
 
 import discord
@@ -19,6 +21,7 @@ import datetime, pytz
 
 from utils.helpers import deep_update_json
 from utils.classes import Paths
+from .__gapi_exceptions import GenshinAPIError, UnintelligibleResponseError, validate_API_response
 
 import logging
 logger = logging.getLogger("GAPI")
@@ -83,17 +86,27 @@ class Genshin_API:
         async with aiohttp.ClientSession() as session:
             request: Union[session.get, session.post] = getattr(session, request_type)
             async with request(endpoint_url, headers=HEADERS, cookies=cookies, json=params) as response:
-                r = await response.read()
-                print("!> ",r)
-                response_data = json.loads(r)
+                try:
+                    response_data: dict = await response.json()
+                    logger.log(1, response_data)
+                except Exception as e:
+                    # TODO: figure out which exception to intercept here (for non-json output)
+                    response_data: str = await response.read()
+                    raise UnintelligibleResponseError(response_data)
 
-        # if response_data["retcode"] != 0: raise CommandError(response_data["message"])
+            if response_data["retcode"] != 0:
+                validate_API_response(response_data)
+
         return response_data["data"]
 
     
     async def daily_claim_status(self, cookies):
         params = dict(act_id = OS_ACT_ID)
-        response = await self.fetch_endpoint(OS_URL + "info", cookies=cookies, **params)
+        response = await self.fetch_endpoint(
+            OS_URL + "info",
+            cookies=cookies,
+            **params
+        )
 
         if response["first_bind"]: raise CommandError("You must manually claim daily rewards on Hoyolab at least once.")          # TODO: custom exception here
         if response["is_sign"]: raise CommandError("It appears you have already signed in today")
@@ -104,7 +117,12 @@ class Genshin_API:
         """Sign into Hoyolab to claim daily rewards."""
 
         params = dict(lang = "en-us", act_id = OS_ACT_ID)
-        response = await self.fetch_endpoint(OS_URL + "sign", request_type="post", cookies=cookies, **params)
+        response = await self.fetch_endpoint(
+            OS_URL + "sign",
+            request_type="post",
+            cookies=cookies,
+            **params
+        )
 
         return response
 
@@ -175,22 +193,21 @@ class Genshin_API_Claimer(Genshin_API):
         self, *,
         user: Union[discord.Member, discord.User],
         individual_data: dict,
-    ) -> object:
-        """Claim Hoyolab daily rewards by making the proper API calls.
+    ) -> Union[object, GenshinAPIError]:
+        """Claim Hoyolab daily rewards for a user by making the proper API calls.
         
         Parameters:
         -----------
         user: :class:`discord.Member`
-            the user whose rewards we are attempting to claim.
+            The user whose rewards we are attempting to claim.
         individual_data: :class:`dict`
-            a dict that holds a single user's user_data. This is derived from user_data.json,
-            by selecting a single top-level entry (user).
+            A dict that holds the user's user_data. This is derived from user_data.json, by selecting a single top-level entry (user).
 
         Returns:
         --------
-        object: Union[:class:`__NoCookies`, :class:`__AlreadyClaimed`, :class:`__ClaimFail`, :class:`__ClaimSuccess`]
-            a sentinel value to propagate the request state through to the calling function.
-            The names should be self-explanatory.
+        object: Union[Union[:class:`__NoCookies`, :class:`__AlreadyClaimed`, :class:`__ClaimFail`, :class:`__ClaimSuccess`], :class:`GenshinAPIError`]
+            A sentinel value to propagate the request state through to the calling function. The names should be self-explanatory.
+            Alternatively, if an error occurs during one of the requests, the error is returned instead.
         """
 
         # Technically we can get the auth_cookies from only the user object, but for auto-login that would mean:
@@ -220,6 +237,9 @@ class Genshin_API_Claimer(Genshin_API):
             logger.log(1, f"Auto-login failed for user {user.id}: {e}")
             update_latest_claim(self.get_API_date())
             return self.__AlreadyClaimed
+        except GenshinAPIError as e:
+            logger.log(2, f"Auto-login failed for user {user.id}: {e}")
+            return e
         
         # Try claiming
         try:
@@ -230,6 +250,9 @@ class Genshin_API_Claimer(Genshin_API):
         except CommandError as e:
             logger.log(1, f"Auto-login failed for user {user.id}: {e}")
             return self.__ClaimFail
+        except GenshinAPIError as e:
+            logger.log(2, f"Auto-login failed for user {user.id}: {e}")
+            return e
 
 
     # Claim slashcommand
@@ -254,8 +277,11 @@ class Genshin_API_Claimer(Genshin_API):
             return await ctx.send(self.__str__already_claimed.format(ctx.author.mention), hidden=True)
         elif response is self.__ClaimFail:
             return await ctx.send(self.__str__claim_fail.format(ctx.author.mention), hidden=True)
-        else:
+        elif response is self.__ClaimSuccess:
             return await ctx.send(self.__str__claim_success.format(ctx.author.mention), hidden=True)
+
+        else:   # Exception occurred
+            await ctx.send(str(response).format(ctx.author), hidden=True)
 
 
     # Autoclaim
@@ -282,6 +308,10 @@ class Genshin_API_Claimer(Genshin_API):
             for guild in guilds:
                 succeeded[guild].append(user)
 
+        def on_exception(guilds: list[int], user: discord.User):
+            for guild in guilds:
+                failed[guild].append(user)
+
         state = {
             self.__NoCookies: on_no_cookies,
             self.__AlreadyClaimed: on_already_claimed,
@@ -298,7 +328,9 @@ class Genshin_API_Claimer(Genshin_API):
             )
 
             # Call the function corresponding to the correct response
-            state[response](guilds, user)
+            state.get(response, on_exception)(guilds, user)
+            if isinstance(response, GenshinAPIError):
+                await user.send(str(response).format(user))
 
 
         for guild_id, users in succeeded.items():
@@ -323,6 +355,9 @@ class Genshin_API_Claimer(Genshin_API):
         if datetime.datetime.utcnow().time() < DAILY_CLAIM_TIME:
            await self.gapi_claim_daily()
         pass
+
+    def cog_unload(self):
+        self.gapi_claim_daily.cancel()
 
 
 
