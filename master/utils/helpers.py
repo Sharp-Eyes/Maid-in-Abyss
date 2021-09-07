@@ -64,7 +64,7 @@ def search_all_extensions(*,
         a regex pattern that should match all file names that are to be ignored.
     """
 
-    for dirpath, dirnames, filenames in walk(Paths.cogs):
+    for dirpath, _, filenames in walk(Paths.cogs):
         cur_dir = dirpath.rsplit("\\",1)[1]
         if _re.match(blacklisted_dirs, cur_dir): continue
 
@@ -76,18 +76,6 @@ def search_all_extensions(*,
             ext_path = dirpath.split(Paths.root, 1)[1].replace("\\", ".")
             yield f"{ext_path}.{filename}"
 
-
-def search_loaded_extensions(bot: commands.Bot, *extension_names):
-    """Search for loaded extensions that match a given pattern"""
-    
-    extensions = bot.extensions.copy()
-    # Match e.g. "cogs.administrative.exts" and "exts", but not e.g. "gs.administrative.exts", "xts"
-    pat = r"(^|.+\.)" + "({})".format("|".join(extension_names))
-
-    for extension in extensions:
-
-        match = _re.match(pat, extension)
-        if match: yield match.group(0)
 
 
 # JSON helpers

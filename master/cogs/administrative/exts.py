@@ -1,16 +1,8 @@
-from typing import Tuple, Union
 import discord
 from discord.ext import commands
 
-from os import walk
-import re
-import traceback
-
-from discord.ext.commands.errors import ExtensionError
-
-from utils.helpers import search_loaded_extensions, search_all_extensions
-
-
+from discord.ext.commands.errors import BadArgument
+from utils.converters import ExtensionConverter
 
 class Extension_Manager(commands.Cog):
 
@@ -18,99 +10,70 @@ class Extension_Manager(commands.Cog):
         self.bot = bot
 
 
+    async def cog_check(self, ctx: commands.Context):       # should probably replace this with a bot owner only check
+        channel: discord.TextChannel = ctx.channel
+        permissions = channel.permissions_for(ctx.author)
+        return permissions.administrator
+
+
+    __success_str = "Successfully {}ed extension(s) {}."
+    @staticmethod
+    def __make_ext_str(extensions):
+        return ", ".join(f"`{ext}`" for ext in extensions)
+
+    @staticmethod
+    def __handle_extensions(method, extensions):
+        for ext in extensions:
+            if isinstance(ext, BadArgument):
+                raise ext
+            method(ext)
+
 
     @commands.command(
         name = "load"
     )
-    async def load_extension(self, ctx: commands.Context, ext_name: str):
-
-        for extension in search_all_extensions():
-            # Match e.g. "cogs.administrative.exts" and "exts", but not e.g. "gs.administrative.exts", "xts"
-            pat = r"(^|.+\.)" + ext_name
-            match = re.match(pat, extension)
-            if not match: continue
-
-            try:
-                self.bot.load_extension(extension)
-                await ctx.send(f"Successfully loaded extension {ext_name}!")
-            
-            except ExtensionError as e:
-                await ctx.send(f"Failed to load extension {ext_name}: `{e}`.")
-                traceback.print_exc()
-            
-            finally:
-                return
-
-        await ctx.send(f"Could not find an extension by the name of {ext_name}.")
-
-
-    def reload_or_unload_extension(self, method: Union[commands.Bot.load_extension, commands.Bot.unload_extension], *extension_names: list[str]) -> bool:
-
-        extension = None
-        for extension in search_loaded_extensions(self.bot, *extension_names):
-            try:
-                method(extension)
-                yield True
-
-            except ExtensionError as e:
-                traceback.print_exc()
-                yield False
-
-        if extension is None: yield None
-
-
-
-    @commands.command(
-        name = "reload"
-    )
-    async def reload_extension(self, ctx: commands.Context, *ext_names: str):
-
-        method = self.bot.reload_extension
-        r = [[], []]    # Result, fails in r[0], success in r[1] (True/False are treated as ints 1/0 when indexing)
-        for i, result in enumerate(self.reload_or_unload_extension(method, *ext_names)):
-            name = ext_names[i]
-
-            # Not found:
-            if result is None:
-                await ctx.send(f"Could not find an extension by the name of {name}")
-                continue
-
-            # Found:
-            r[result].append(name)
-
-        if r[0]:
-            await ctx.send("Failed to reload extension(s): " + ", ".join(r[0]))
-        if r[1]:
-            await ctx.send("Successfully reloaded extension(s): " + ", ".join(r[1]))
-
-
-
+    async def load_exts(self, ctx: commands.Context, extensions: commands.Greedy[ExtensionConverter(loaded=False)]):
+        self.__handle_extensions(
+            self.bot.load_extension,
+            extensions
+        )
+        await ctx.send(self.__success_str.format(
+            "load",
+            self.__make_ext_str(extensions)
+        ))
 
     @commands.command(
         name = "unload"
     )
-    async def unload_extension(self, ctx: commands.Context, *ext_names: str):
+    async def unload_exts(self, ctx: commands.Context, extensions: commands.Greedy[ExtensionConverter(unloaded=False)]):
+        self.__handle_extensions(
+            self.bot.unload_extension,
+            extensions
+        )
+        await ctx.send(self.__success_str.format(
+            "unload",
+            self.__make_ext_str(extensions)
+        ))
 
-        method = self.bot.unload_extension
-        r = [[], []]    # Result, fails in r[0], success in r[1] (True/False are treated as ints 1/0 when indexing)
-        for i, result in enumerate(self.reload_or_unload_extension(method, *ext_names)):
-            name = ext_names[i]
+    @commands.command(
+        name = "reload"
+    )
+    async def reload_exts(self, ctx: commands.Context, extensions: commands.Greedy[ExtensionConverter(unloaded=False)]):
+        self.__handle_extensions(
+            self.bot.reload_extension,
+            extensions
+        )
+        await ctx.send(self.__success_str.format(
+            "reload",
+            self.__make_ext_str(extensions)
+        ))
 
-            # Not found:
-            if result is None:
-                await ctx.send(f"Could not find an extension by the name of {name}")
-                continue
-
-            # Found:
-            r[result].append(name)
-
-        if r[0]:
-            await ctx.send("Failed to unload extension(s): " + ", ".join(r[0]))
-        if r[1]:
-            await ctx.send("Successfully unloaded extension(s): " + ", ".join(r[1]))
-
-        
-
+    @load_exts.error
+    @unload_exts.error
+    @reload_exts.error
+    async def ext_error(self, ctx, error):
+        if isinstance(error, commands.BadArgument):
+            await ctx.send(error)
 
 
 def setup(bot: commands.Bot):

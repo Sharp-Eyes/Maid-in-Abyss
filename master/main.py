@@ -40,7 +40,7 @@ def get_prefix(bot: commands.Bot, msg: discord.Message):
     guild: discord.Guild = msg.guild
 
     # DM:
-    if not guild: return handle(DEFAULT_PREFIX)(bot, msg)
+    if not guild: return handle(*DEFAULT_PREFIX)(bot, msg)
 
     # Guild:
     with open(Paths.guild_data) as data_file:
@@ -80,7 +80,7 @@ if __name__ == "__main__":
                 print(f"> Failed to load extension {extension}: {e}.", file=sys.stderr)
                 traceback.print_exc()
 
-        print(f"\n> Encountered {exceptions} exceptions in loading cogs.")
+        print(f"\n> Encountered {exceptions} exceptions in loading cogs.\n")
         await slash.sync_all_commands()
 
 
