@@ -290,15 +290,16 @@ class Genshin_API_Cog(commands.Cog, Genshin_API_Claimer):
                     succeeded[guild].append(user)
         
             except GenshinAPIError as e:
-                for guild in guilds:
-                    failed[guild].append(user)
                 
                 if isinstance(e, FirstSign):
-                    return await user.send(str(e).format(user))
+                    await user.send(str(e).format(user))
+                    for guild in guilds:
+                        failed[guild].append(user)
+                    continue
                 
                 if isinstance(e, AlreadySigned):
-                    # Don't want to ping a user that already checked in with daily check-in, just to minimize spam
-                    return
+                    # Don't want to ping a user that already checked in manually, just to minimize spam
+                    continue
 
 
         for guild_id, users in succeeded.items():

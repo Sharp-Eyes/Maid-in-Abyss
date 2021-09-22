@@ -12,6 +12,13 @@ import logging
 logger = logging.getLogger("GAPI")
 
 
+__all__ = (
+    "get_API_datetime",
+    "get_API_date",
+    "Genshin_API"
+)
+
+
 # Constants
 OS_URL = "https://hk4e-api-os.mihoyo.com/event/sol/"
 OS_ACT_ID = "e202102251931481"
@@ -31,31 +38,44 @@ HEADERS = {
     "user-agent": USER_AGENT
 }
 
+
+def generate_ds_token(salt: str = DS_SALT) -> str:
+    """Creates a new ds token for authentication."""
+    t = int(datetime.datetime.utcnow().toordinal())  # current seconds
+    r = ''.join(random.choice(list(string.ascii_letters), 6))  # 6 random chars
+    h = hashlib.md5(f"salt={salt}&t={t}&r={r}".encode()).hexdigest()  # hash and get hex
+    return f'{t},{r},{h}'
+
+def get_API_datetime() -> datetime.datetime:
+    """Returns a datetime object attuned with HoYoLAB server time (tz: Asia/Shanghai)"""
+    return datetime.datetime.now(pytz.timezone("Asia/Shanghai"))
+
+def get_API_date() -> str:
+    """Returns the current date as `yyyy-mm-dd`, as is returned by the HoYoLAB API."""
+    return get_API_datetime().strftime("%Y-%m-%d")
+
+
 class Genshin_API:
-    """Class that organizes a couple helper functions for API calls"""
+    """A class that organizes helper functions for HoYoLAB API calls."""
 
-    def generate_ds_token(salt: str = DS_SALT) -> str:
-        """Creates a new ds token for authentication."""
-        t = int(datetime.datetime.utcnow().toordinal())  # current seconds
-        r = ''.join(random.choice(list(string.ascii_letters), 6))  # 6 random chars
-        h = hashlib.md5(f"salt={salt}&t={t}&r={r}".encode()).hexdigest()  # hash and get hex
-        return f'{t},{r},{h}'
-
-    
-    def get_API_datetime(self):
-        return datetime.datetime.now(pytz.timezone("Asia/Shanghai"))
-        
-    def get_API_date(self):
-        return self.get_API_datetime().strftime("%Y-%m-%d")
-
-
-    async def fetch_endpoint(self, endpoint_url, *, request_type="get", cookies = None, **params):
+    async def fetch_endpoint(self, endpoint_url: str, *, request_type: str = "get", cookies: dict = None, **params) -> dict:
         """Make an API call to the given endpoint url with provided authorization cookies.
         API calls can be either POST or GET, dependent on the endpoint. Can be provided with optional
-        parameters `params`, which will be passed as JSON in POST-requests.
+        parameters `params`, which will be passed as JSON in POST-requests. Returns the response
+        JSON content in a dict.
+
+        Parameters:
+        -----------
+        endpoint_url: :class:`str`
+            The URL of the endpoint to which the API call is to be made.
+        request_type: :class:`str`
+            The type of request that is to be made to the API endpoint. Can be:\n
+                `"get"` -> :method:`aiohhtp.ClientSession.get`\n
+                `"post"` -> :method:`aiohhtp.ClientSession.post`
+
         """
         headers = HEADERS.copy()
-        headers["ds"] = self.generate_ds_token()
+        headers["ds"] = generate_ds_token()
 
         async with aiohttp.ClientSession() as session:
             request: Union[session.get, session.post] = getattr(session, request_type)
@@ -75,6 +95,9 @@ class Genshin_API:
 
 
     async def daily_claim_status(self, cookies):
+        """Check whether the user whose authorization cookies were provided can claim
+        their daily rewards.
+        """
         params = dict(act_id = OS_ACT_ID)
         response = await self.fetch_endpoint(
             OS_URL + "info",

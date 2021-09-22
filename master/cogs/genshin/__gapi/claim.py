@@ -1,5 +1,5 @@
 from .exceptions import *
-from .api import Genshin_API
+from .api import Genshin_API, get_API_date
 
 import discord
 #from discord.ext import commands
@@ -14,10 +14,11 @@ import logging
 logger = logging.getLogger("GAPI")
 
 
-class Genshin_API_Claimer(Genshin_API):
+__all__ = ["Genshin_API_Claimer"]
 
-    def __init__(self):
-        pass
+
+class Genshin_API_Claimer(Genshin_API):
+    """"""
 
     # Helper functions
 
@@ -110,29 +111,31 @@ class Genshin_API_Claimer(Genshin_API):
 
         # Check claim status
         latest_claim = nested_get(individual_data, "Genshin_Impact", "latest_claim")
-        if latest_claim == self.get_API_date():
+        if latest_claim == get_API_date():
             # latest cached claim was today, thus we exit without making any API calls.
+            logger.log(1, f"Auto-claim failed for user {user.name}#{user.discriminator}: rewards already claimed (Cache).")
             raise AlreadySigned("{0.mention}, you appear to have already claimed your daily rewards today.")
 
         try:
             await self.daily_claim_status(cookies=auth_cookies)
 
         except GenshinAPIError as e:
-            logger.log(1, f"Auto-login failed for user {user.id}: {e}")
             
             if isinstance(e, FirstSign):
+                logger.log(1, f"Auto-claim failed for user {user.name}#{user.discriminator}: not yet manually claimed (API).")
                 raise e
             
             if isinstance(e, AlreadySigned):
+                logger.log(1, f"Auto-claim failed for user {user.name}#{user.discriminator}: rewards already claimed (API).")
                 # Since the user already signed in but the cached date does not match, we can update the cached date to today
                 # to save on any further API calls.
-                update_latest_claim(self.get_API_date())
+                update_latest_claim(get_API_date())
                 raise e
         
         # Try claiming
         try:
             await self.daily_claim_exec(cookies=auth_cookies)
-            update_latest_claim(self.get_API_date())
+            update_latest_claim(get_API_date())
             return True
 
         except GenshinAPIError as e:

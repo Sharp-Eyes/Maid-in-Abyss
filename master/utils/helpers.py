@@ -52,7 +52,7 @@ def deep_update(D: dict, U: dict, *, update_None: bool = True, update_falsy: boo
 def nested_get(d: dict, *keys: list, ret: Any = None):
     """Get data from a nested dict by supplying a list of keys. Returns :param:`ret` if nothing could be found."""
     if len(keys) > 1:
-        return nested_get(d.get(keys[0], {}), *keys[1:])
+        return nested_get(d.get(keys[0], {}), *keys[1:], ret=ret)
     return d.get(keys[0], ret)
 
 
