@@ -6,6 +6,8 @@ from main import DEFAULT_PREFIX
 from utils.helpers import deep_update
 from utils.classes import Paths
 
+DEFAULT_PREFIX_STR = ", ".join(DEFAULT_PREFIX)
+DEFAULT_PREFIX_STR_STYLIZED = ", ".join(f"`{p}`" for p in DEFAULT_PREFIX)
 
 class Guild_Cog(commands.Cog):
 
@@ -18,15 +20,33 @@ class Guild_Cog(commands.Cog):
         brief = "Change the prefix to which I respond for the current guild."
         # description = TODO
     )
-    async def base_prefix(self, ctx: commands.Context):
+    async def prefix_base(self, ctx: commands.Context):
         print(ctx.invoked_subcommand)
 
 
 
-    @base_prefix.command(
-        name = "set"
+    @prefix_base.command(
+        name = "set",
+        description = (
+            "<n>Description:"
+            "<v>Change the prefix(es) to which I respond. This can be almost anything, "
+            "though I recommend not using any quotation marks, as they may produce "
+            "invalid results.\nLeave `[prefixes]` blank to return me to my default "
+            f"prefix(es): {DEFAULT_PREFIX_STR_STYLIZED}. This may be handy when you provide me with "
+            "disfunctional prefixes. Finally, know that I will always respond to being "
+            "@mentioned."
+            "<n>Examples:"
+            "<v>```ini\n[1] <p>prefix set . maid.\n[2] <p>prefix set .\n"
+            "[3] <p>prefix set```"
+            "`[1]` makes me respond to both `.<command>` and `maid.<command>`;\n"
+            "`[2]` makes me respond only to `.<command>`;\n"
+            f"`[3]` makes me respond to my default prefix(es): {', '.join(f'`{p}<command>`' for p in DEFAULT_PREFIX)}."
+        )
     )
-    async def set_prefix(self, ctx: commands.Context, *prefixes):
+    async def prefix_set(self, ctx: commands.Context, *prefixes):
+
+        if not prefixes:
+            return await self.prefix_set(ctx, *DEFAULT_PREFIX)
 
         guild: discord.Guild = ctx.guild
         # DMs
@@ -46,10 +66,10 @@ class Guild_Cog(commands.Cog):
         
 
 
-    @base_prefix.command(
+    @prefix_base.command(
         name = "get"
     )
-    async def get_prefix(self, ctx: commands.Context):
+    async def prefix_get(self, ctx: commands.Context):
 
         guild: discord.Guild = ctx.guild
 

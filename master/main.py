@@ -53,11 +53,14 @@ def get_prefix(bot: commands.Bot, msg: discord.Message):
 
 
 if __name__ == "__main__":
-    bot = commands.Bot(                 #Custom_Bot
+    bot = commands.Bot(
         command_prefix=get_prefix,
         intents = intents
     )
-    slash = SlashCommand(bot, sync_on_cog_reload=True) # Declares slash commands through the client.
+    slash = SlashCommand(    # Declares slash commands through the client.
+        bot,
+        sync_on_cog_reload=True
+    )
 
     @bot.event
     async def on_ready():

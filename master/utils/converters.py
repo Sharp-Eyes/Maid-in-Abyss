@@ -40,26 +40,28 @@ class ExtensionConverter(Converter[str]):
         bot: commands.Bot = ctx.bot
         extensions = bot.extensions
 
-        # First check if the extension is already loaded:
-        pat = r"(^|.+\.)" + argument
-        for extension in extensions:
-            if re.match(pat, extension):
-                if self.loaded:
-                    return extension
-                if self.raise_unexpected:
-                    return BadArgument(f"Extension {argument} is already loaded.")
+        try:
+            # First check if the extension is already loaded:
+            pat = r"(^|.+\.)" + argument
+            for extension in extensions:
+                if re.match(pat, extension):
+                    if self.loaded:
+                        return extension
+                    if self.raise_unexpected:
+                        return BadArgument(f"Extension {argument} is already loaded.")
 
-        # Next see if it's among loadable extensions:
-        for extension in search_all_extensions():
-            if extension in extensions: continue
-            if re.match(pat, extension):
-                if self.unloaded:
-                    return extension
-                if self.raise_unexpected:
-                    return BadArgument(f"Extension {argument} is not currently loaded.")
+            # Next see if it's among loadable extensions:
+            for extension in search_all_extensions():
+                if extension in extensions: continue
+                if re.match(pat, extension):
+                    if self.unloaded:
+                        return extension
+                    if self.raise_unexpected:
+                        return BadArgument(f"Extension {argument} is not currently loaded.")
 
-        # Nothing matched:
-        return ExtensionNotFound(argument)
-        
-
-commands.clean_content
+            # Nothing matched:
+            return ExtensionNotFound(argument)
+        except BadArgument as e:
+            return e
+        except Exception as e:
+            print(e)
