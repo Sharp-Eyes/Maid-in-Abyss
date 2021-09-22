@@ -49,3 +49,13 @@ def validate_API_response(response: dict):
     
     error.set_response(response)
     raise error
+
+
+
+# Errors not based on retcodes
+
+class AlreadySigned(GenshinAPIError):
+    """Attempted to claim login rewards when this had already been done today."""
+
+class FirstSign(GenshinAPIError):
+    """Attempted to autoclaim without first having claimed once manually."""

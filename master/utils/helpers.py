@@ -1,4 +1,7 @@
 import inspect
+from typing import Any
+
+import discord
 from discord.ext import commands
 
 from collections.abc import Mapping as _Mapping
@@ -7,7 +10,7 @@ from os import walk
 
 
 
-DEFAULT_EXT_DIR_BLACKLIST = r"^$"
+DEFAULT_EXT_DIR_BLACKLIST = r"__.*"
 DEFAULT_EXT_FILE_BLACKLIST = r"__.*"
 
 
@@ -46,8 +49,23 @@ def deep_update(D: dict, U: dict, *, update_None: bool = True, update_falsy: boo
     return U
 
 
-# Extension management
+def nested_get(d: dict, *keys: list, ret: Any = None):
+    """Get data from a nested dict by supplying a list of keys. Returns :param:`ret` if nothing could be found."""
+    if len(keys) > 1:
+        return nested_get(d.get(keys[0], {}), *keys[1:])
+    return d.get(keys[0], ret)
 
+
+def create_codeblock(s: str, lang: str = ""):
+    return f"```{lang}\n{s}```"
+
+def get_bot_color(bot: commands.Bot, guild: discord.Guild):
+    member: discord.Member = guild.get_member(bot.user.id)
+    return member.top_role.color
+
+
+
+# Extension management
 from .classes import Paths
 
 def search_all_extensions(*,
@@ -79,7 +97,6 @@ def search_all_extensions(*,
 
 
 # JSON helpers
-
 import json as _json
 
 def deep_update_json(path: str, U: dict, *, update_None = True, update_falsy = True) -> dict:
