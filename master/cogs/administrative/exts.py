@@ -59,6 +59,14 @@ class Extension_Manager(commands.Cog):
         name = "reload"
     )
     async def reload_exts(self, ctx: commands.Context, extensions: commands.Greedy[ExtensionConverter(unloaded=False)]):
+        #self.bot.dispatch("cog_reload", extensions)
+        #print("modules reloaded")
+
+        for cog in self.bot.cogs.values():
+            if cog.__module__ not in extensions: continue
+            if not hasattr(cog, "_prep_reload"): continue
+            cog._prep_reload()
+        
         self.__handle_extensions(
             self.bot.reload_extension,
             extensions
@@ -74,6 +82,7 @@ class Extension_Manager(commands.Cog):
     async def ext_error(self, ctx, error):
         if isinstance(error, commands.BadArgument):
             await ctx.send(error)
+
 
 
 def setup(bot: commands.Bot):

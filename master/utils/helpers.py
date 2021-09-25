@@ -4,8 +4,8 @@ from typing import Any
 import discord
 from discord.ext import commands
 
-from collections.abc import Mapping as _Mapping
-import re as _re
+from collections.abc import Mapping
+import re
 from os import walk
 
 
@@ -41,7 +41,7 @@ def deep_update(D: dict, U: dict, *, update_None: bool = True, update_falsy: boo
         def predicate(_): return True
 
 
-    if isinstance(D, _Mapping) and isinstance(U, _Mapping):
+    if isinstance(D, Mapping) and isinstance(U, Mapping):
         for k,v in U.items():
             if predicate(v):
                 D[k] = deep_update(D.get(k), v, update_None=update_None, update_falsy=update_falsy)
@@ -84,17 +84,29 @@ def search_all_extensions(*,
 
     for dirpath, _, filenames in walk(Paths.cogs):
         cur_dir = dirpath.rsplit("\\",1)[1]
-        if _re.match(blacklisted_dirs, cur_dir): continue
+        if re.match(blacklisted_dirs, cur_dir): continue
 
         for file in filenames:
             filename, ext = file.rsplit(".", 1)
             if ext != "py": continue
-            if _re.match(blacklisted_files, filename): continue
+            if re.match(blacklisted_files, filename): continue
 
             ext_path = dirpath.split(Paths.root, 1)[1].replace("\\", ".")
             yield f"{ext_path}.{filename}"
 
+def custom_modules_from_globals(glb: dict) -> set:
+    """Returns a set of all modules loaded in globals that are defined in cogs or utils."""
 
+    pat = r"cogs\..*|utils\..*"
+    current_modules = set(
+        module_name
+        for k,v in glb.items() 
+        if hasattr(v, "__module__") and re.match(
+            pat,
+            module_name := v.__module__
+        )
+    )
+    return current_modules
 
 # JSON helpers
 import json as _json

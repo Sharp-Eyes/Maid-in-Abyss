@@ -9,7 +9,28 @@ class Paths:
     cogs = root + 'cogs\\'
 
 
-# Typehint aides
+# Custom classes
+
+from typing import TypeVar, Callable
+
+_FT = TypeVar("_FT")
+class defaultlist(list):
+
+    default_factory: Callable[[], _FT]
+    def __init__(self, default_factory: Callable[[], _FT]):
+        assert callable(default_factory)
+        self.default_factory = default_factory
+
+    def __getitem__(self, i) -> _FT:
+        try:
+            return super().__getitem__(i)
+        except IndexError:
+            n = self.default_factory()
+            self.append(n)
+            return n
+
+
+# Typehint aide
 
 from discord.ext.commands import Bot
 from discord_slash import SlashCommand
