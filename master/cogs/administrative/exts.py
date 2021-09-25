@@ -59,8 +59,6 @@ class Extension_Manager(commands.Cog):
         name = "reload"
     )
     async def reload_exts(self, ctx: commands.Context, extensions: commands.Greedy[ExtensionConverter(unloaded=False)]):
-        #self.bot.dispatch("cog_reload", extensions)
-        #print("modules reloaded")
 
         for cog in self.bot.cogs.values():
             if cog.__module__ not in extensions: continue

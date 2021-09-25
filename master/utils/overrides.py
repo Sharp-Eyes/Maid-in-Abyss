@@ -62,6 +62,8 @@ class Full_Reload_Cog(commands.Cog):
                 return os.path.relpath(path, "master").replace("\\",".")
                 
         
+        # TODO: since there is no guarantee an init module is first encountered at minimum depth (I don't think)
+        #       there is a chance it will be reloaded before its dependencies are. Confirm false or fix this.
         def get_modules_rec(glb: dict[str, Any], depth: int = 0):
             """Recursively get all modules imported by a module, then all modules imported by
             those imported modules, and so forth. These fill out `modules` in order of the
@@ -145,4 +147,4 @@ class Full_Reload_Cog(commands.Cog):
                     # pretty much does what "from <mod> import <o>" does
                     glb[o.__name__] = getattr(sys.modules[mod], o.__name__)
 
-            to_ignore.update(mods)
+            to_ignore.update(new)
