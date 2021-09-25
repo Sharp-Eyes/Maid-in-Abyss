@@ -20,13 +20,14 @@ class Full_Reload_Cog(commands.Cog):
 
     def _prep_reload(self):
 
-        # Pattern that only matches 'custom', self-made module names. Mostly used because we don't try to reload
+        # Pattern that only matches 'custom', self-made module names. Mostly used because we don't need to reload
         # modules like `re` or `discord`, as they won't be modified during runtime (or at all) anyways.
         pat = r"^cogs\..*$|^utils\..*$"
 
         # Since the passed self is always the calling class instance, calling `on_cog_reload` from a class that
         # subclasses `Full_Reload_Cog` will make self that instance, not an instance of `Full_Reload_Cog`. We can
-        # use that to grab the globals of the module in which that class is defined.
+        # use that to grab the globals of the module in which that class is defined. Note that <module>.__dict__
+        # is equivalent to calling globals() in module <module>.
         glb = sys.modules[self.__module__].__dict__
 
         def make_new():
