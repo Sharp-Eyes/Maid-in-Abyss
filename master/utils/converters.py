@@ -1,7 +1,7 @@
-from discord.ext import commands
-import re
+from disnake.ext import commands
+BadArgument = commands.errors.BadArgument
 
-from discord.ext.commands.errors import BadArgument
+import re
 
 from .exceptions import ExtensionNotFound
 from .helpers import search_all_extensions

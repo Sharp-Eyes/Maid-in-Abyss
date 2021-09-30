@@ -1,0 +1,9 @@
+[flake8]
+# For error codes, see this https://flake8.pycqa.org/en/latest/user/error-codes.html
+ignore = F401, F404, F406, F541, F841, W503
+max-line-length = 100
+
+per-file-ignores =
+    master/utils/overrides.py:E701
+    master/utils/helpers.py:E701,E402
+    master/main.py:E701

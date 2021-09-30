@@ -1,4 +1,10 @@
+from __future__ import annotations
+
+import re
 from dataclasses import dataclass
+
+from typing import TypeVar, Callable
+
 
 @dataclass
 class Paths:
@@ -11,13 +17,22 @@ class Paths:
 
 # Custom classes
 
-from typing import TypeVar, Callable
 
 _FT = TypeVar("_FT")
-class defaultlist(list):
 
-    default_factory: Callable[[], _FT]
-    def __init__(self, default_factory: Callable[[], _FT]):
+
+class defaultlist(list[_FT]):
+    """List that automatically appends a new entry when indexed out of range.
+    This is done by calling :func:`default_factory`.
+
+    Parameters:
+    -----------
+    default_factory: :func:
+        The function that is called when appending a new list entry. The return
+        of this function will then populate that new list entry.
+    """
+
+    def __init__(self, default_factory: Callable[[], _FT] | None):
         assert callable(default_factory)
         self.default_factory = default_factory
 
@@ -30,15 +45,16 @@ class defaultlist(list):
             return n
 
 
-# Typehint aide
+class Codeblock(str):
 
-from discord.ext.commands import Bot
-from discord_slash import SlashCommand
+    def __init__(self, content: str, *, lang: str = None):
+        if lang is not None:
+            self.content = content
+            self.lang = lang
+            return
 
-class Slashbot(Bot):
-    """As :module:`discord_slash` monkey-patches commands.Bot with its own functionality
-    from :class:`~.SlashCommand`, a normal :class:`commands.Bot` is not aware of this
-    added functionality, and is thus not properly type-hinted. This class can be used
-    instead, and should solely be used for typehinting.
-    """
-    slash = SlashCommand
+        match = re.fullmatch(r"```(.*)\n(.+)(?:\n)```", content, re.M | re.DOTALL)
+        self.content, self.lang = match.groups() if match else (content, "")
+
+    def __str__(self):
+        return f"```{self.lang}\n{self.content}```"

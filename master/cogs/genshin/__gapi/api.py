@@ -1,12 +1,21 @@
-import datetime, pytz
-from typing import Union
+from .exceptions import (
+    validate_API_response, UnintelligibleResponseError, FirstSign,
+    AlreadySigned
+)
+
+import asyncio
 import aiohttp
-import string, hashlib
 
+import datetime
+import pytz
+import string
+import hashlib
+import json
 from numpy import random
+from typing import Union
 
-from .exceptions import *
-
+from utils.classes import Paths
+from utils.helpers import nested_get
 
 import logging
 logger = logging.getLogger("GAPI")
@@ -15,9 +24,9 @@ logger = logging.getLogger("GAPI")
 __all__ = (
     "get_API_datetime",
     "get_API_date",
-    "Genshin_API"
+    "Genshin_API",
+    "GUILDS"
 )
-
 
 # Constants
 OS_URL = "https://hk4e-api-os.mihoyo.com/event/sol/"
@@ -25,8 +34,10 @@ OS_ACT_ID = "e202102251931481"
 
 BASE_URL = "https://bbs-api-os.hoyolab.com/"
 DS_SALT = "6cqshh5dhw73bzxn20oexa9k516chk7s"
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
-
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/58.0.3029.110 Safari/537.36"
+)
 HEADERS = {
     # required headers
     "x-rpc-app_version": "1.5.0",  # overseas api uses 1.x.x, chinese api uses 2.x.x
@@ -38,31 +49,54 @@ HEADERS = {
     "user-agent": USER_AGENT
 }
 
+# Predetermine guilds for local slash commands
+with open(Paths.guild_data) as guild_file:
+    guild_data: dict = json.load(guild_file)
+    GUILDS = [
+        int(guild_id)
+        for guild_id, data in guild_data.items()
+        if nested_get(data, "Genshin_Impact", "gapi_notification_channel")
+    ]
+    del guild_data
+
 
 def generate_ds_token(salt: str = DS_SALT) -> str:
-    """Creates a new ds token for authentication."""
+    """Create a new ds token for authentication."""
     t = int(datetime.datetime.utcnow().toordinal())  # current seconds
     r = ''.join(random.choice(list(string.ascii_letters), 6))  # 6 random chars
     h = hashlib.md5(f"salt={salt}&t={t}&r={r}".encode()).hexdigest()  # hash and get hex
     return f'{t},{r},{h}'
 
+
 def get_API_datetime() -> datetime.datetime:
-    """Returns a datetime object attuned with HoYoLAB server time (tz: Asia/Shanghai)"""
+    """Get the current time as a datetime object attuned with HoYoLAB server time.
+    (tz: Asia/Shanghai)
+    """
     return datetime.datetime.now(pytz.timezone("Asia/Shanghai"))
 
+
 def get_API_date() -> str:
-    """Returns the current date as `yyyy-mm-dd`, as is returned by the HoYoLAB API."""
+    """Get the current date in yyyy-mm-dd, as is returned by the HoYoLAB API,
+    attuned with HoYoLAB server time (tz: Asia/Shanghai).
+    """
     return get_API_datetime().strftime("%Y-%m-%d")
 
 
 class Genshin_API:
     """A class that organizes helper functions for HoYoLAB API calls."""
 
-    async def fetch_endpoint(self, endpoint_url: str, *, request_type: str = "get", cookies: dict = None, **params) -> dict:
+    async def fetch_endpoint(
+        self,
+        endpoint_url: str,
+        *,
+        request_type: str = "get",
+        cookies: dict = None,
+        **params
+    ) -> dict:
         """Make an API call to the given endpoint url with provided authorization cookies.
-        API calls can be either POST or GET, dependent on the endpoint. Can be provided with optional
-        parameters `params`, which will be passed as JSON in POST-requests. Returns the response
-        JSON content in a dict.
+        API calls can be either POST or GET, dependent on the endpoint. Can be provided with
+        optional parameters `params`, which will be passed as JSON in POST-requests.
+        Returns the response JSON content in a dict.
 
         Parameters:
         -----------
@@ -70,16 +104,26 @@ class Genshin_API:
             The URL of the endpoint to which the API call is to be made.
         request_type: :class:`str`
             The type of request that is to be made to the API endpoint. Can be:\n
-                `"get"` -> :method:`aiohhtp.ClientSession.get`\n
-                `"post"` -> :method:`aiohhtp.ClientSession.post`
-
+                `"get"` -> :method:`aiohttp.ClientSession.get`\n
+                `"post"` -> :method:`aiohttp.ClientSession.post`
+        cookies: :class:`dict`
+            A dict that contains the user's authorization cookies.
+        params:
+            Any additional keyword arguments are passed as JSON parameters in the request.
+            Mainly used to provide data in POST requests.
         """
         headers = HEADERS.copy()
         headers["ds"] = generate_ds_token()
 
         async with aiohttp.ClientSession() as session:
             request: Union[session.get, session.post] = getattr(session, request_type)
-            async with request(endpoint_url, headers=headers, cookies=cookies, json=params) as response:
+            async with request(
+                endpoint_url,
+                headers=headers,
+                cookies=cookies,
+                json=params
+            ) as response:
+
                 try:
                     response_data: dict = await response.json()
                     logger.log(1, response_data)
@@ -93,34 +137,46 @@ class Genshin_API:
 
         return response_data["data"]
 
+    async def get_game_accounts(cls, *, cookies) -> dict:
+        """Get the game accounts of the user with the provided cookies."""
+        data = await cls.fetch_endpoint(
+            "https://api-os-takumi.mihoyo.com/binding/api/getUserGameRolesByCookie",
+            cookies=cookies
+        )
+        return data["list"]
 
-    async def daily_claim_status(self, cookies):
+    async def daily_claim_status(cls, *, cookies):
         """Check whether the user whose authorization cookies were provided can claim
         their daily rewards.
         """
-        params = dict(act_id = OS_ACT_ID)
-        response = await self.fetch_endpoint(
+        params = {"act_id": OS_ACT_ID}
+        response = await cls.fetch_endpoint(
             OS_URL + "info",
             cookies=cookies,
             **params
         )
 
-        if response["first_bind"]: raise FirstSign(
-            "Unfortunately, I was unable to claim your Hoyolab daily login rewards. "
-            "It seems that you have not yet claimed the login rewards manually at "
-            "least once. Due to API limitations, it appears this is necessary.\n"
-            "Please claim your daily login rewards manually at https://webstatic-sea.mihoyo.com/ys/event/signin-sea/."
-        )
-        if response["is_sign"]: raise AlreadySigned("{0.mention}, it appears you have already signed in today")
+        if response["first_bind"]:
+            raise FirstSign(
+                "Unfortunately, I was unable to claim your Hoyolab daily login rewards. "
+                "It seems that you have not yet claimed the login rewards manually at "
+                "least once. Due to API limitations, it appears this is necessary.\n"
+                "Please claim your daily login rewards manually at "
+                "https://webstatic-sea.mihoyo.com/ys/event/signin-sea/."
+            )
+        if response["is_sign"]:
+            raise AlreadySigned("{0.mention}, it appears you have already signed in today")
 
         return response
 
-
-    async def daily_claim_exec(self, cookies):
+    async def daily_claim_exec(cls, *, cookies):
         """Sign into Hoyolab to claim daily rewards."""
 
-        params = dict(lang = "en-us", act_id = OS_ACT_ID)
-        response = await self.fetch_endpoint(
+        params = dict(
+            lang="en-us",
+            act_id=OS_ACT_ID
+        )
+        response = await cls.fetch_endpoint(
             OS_URL + "sign",
             request_type="post",
             cookies=cookies,
@@ -128,3 +184,26 @@ class Genshin_API:
         )
 
         return response
+
+    async def redeem_cdkey(cls, *, cookies, cdkey):
+        accs = [
+            account
+            for account in cls.get_game_accounts(cookies=cookies)
+            if account["level"] >= 10
+        ]
+        const_params = dict(
+            cdkey=cdkey,
+            game_biz="hk4e_global",
+            lang="en"
+        )
+
+        for i, acc in enumerate(accs):
+            if i:
+                await asyncio.sleep(5)    # Ratelimit
+            await cls.fetch_endpoint(
+                "https://hk4e-api-os.mihoyo.com/common/apicdkey/api/webExchangeCdkey",
+                cookies=cookies,
+                uid=acc["game_uid"],
+                region=acc["region"],
+                **const_params
+            )

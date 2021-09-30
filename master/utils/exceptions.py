@@ -1,4 +1,4 @@
-from discord.ext import commands
+from disnake.ext import commands
 
 class ExtensionNotFound(commands.BadArgument):
     """Exception provided when the queried cog could not be found.

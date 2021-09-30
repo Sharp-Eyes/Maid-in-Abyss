@@ -1,22 +1,24 @@
-import discord
-from discord.ext import commands
+import disnake
+from disnake.ext import commands
+from disnake.ext.commands.errors import BadArgument
 
-from discord.ext.commands.errors import BadArgument
+import traceback
+
 from utils.converters import ExtensionConverter
+
 
 class Extension_Manager(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-
-    async def cog_check(self, ctx: commands.Context):       # should probably replace this with a bot owner only check
-        channel: discord.TextChannel = ctx.channel
+    async def cog_check(self, ctx: commands.Context):
+        channel: disnake.TextChannel = ctx.channel
         permissions = channel.permissions_for(ctx.author)
         return permissions.administrator
 
-
     __success_str = "Successfully {}ed extension(s) {}."
+
     @staticmethod
     def __make_ext_str(extensions):
         return ", ".join(f"`{ext}`" for ext in extensions)
@@ -28,11 +30,14 @@ class Extension_Manager(commands.Cog):
                 raise ext
             method(ext)
 
-
     @commands.command(
-        name = "load"
+        name="load"
     )
-    async def load_exts(self, ctx: commands.Context, extensions: commands.Greedy[ExtensionConverter(loaded=False)]):
+    async def load_exts(
+        self,
+        ctx: commands.Context,
+        extensions: commands.Greedy[ExtensionConverter(loaded=False)]
+    ):
         self.__handle_extensions(
             self.bot.load_extension,
             extensions
@@ -43,9 +48,13 @@ class Extension_Manager(commands.Cog):
         ))
 
     @commands.command(
-        name = "unload"
+        name="unload"
     )
-    async def unload_exts(self, ctx: commands.Context, extensions: commands.Greedy[ExtensionConverter(unloaded=False)]):
+    async def unload_exts(
+        self,
+        ctx: commands.Context,
+        extensions: commands.Greedy[ExtensionConverter(unloaded=False)]
+    ):
         self.__handle_extensions(
             self.bot.unload_extension,
             extensions
@@ -56,15 +65,19 @@ class Extension_Manager(commands.Cog):
         ))
 
     @commands.command(
-        name = "reload"
+        name="reload"
     )
-    async def reload_exts(self, ctx: commands.Context, extensions: commands.Greedy[ExtensionConverter(unloaded=False)]):
+    async def reload_exts(
+        self,
+        ctx: commands.Context,
+        extensions: commands.Greedy[ExtensionConverter(unloaded=False)]
+    ):
 
         for cog in self.bot.cogs.values():
-            if cog.__module__ not in extensions: continue
-            if not hasattr(cog, "_prep_reload"): continue
+            if cog.__module__ not in extensions: continue  # noqa: E701
+            if not hasattr(cog, "_prep_reload"): continue  # noqa: E701
             cog._prep_reload()
-        
+
         self.__handle_extensions(
             self.bot.reload_extension,
             extensions
@@ -80,7 +93,7 @@ class Extension_Manager(commands.Cog):
     async def ext_error(self, ctx, error):
         if isinstance(error, commands.BadArgument):
             await ctx.send(error)
-
+        traceback.print_exc()
 
 
 def setup(bot: commands.Bot):
