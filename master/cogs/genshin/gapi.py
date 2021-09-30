@@ -15,8 +15,8 @@ from disnake.ext import commands
 from disnake.ext.commands import Param
 from disnake import ApplicationCommandInteraction as Interaction
 
-from utils.helpers import deep_update_json, create_interaction_identifier, codeblock
-from utils.classes import Paths
+from utils.helpers import deep_update_json, create_interaction_identifier
+from utils.classes import Paths, Codeblock
 from utils.overrides import FullReloadCog
 
 import logging
@@ -238,7 +238,7 @@ class GenshinAPI_Cog(CheckIn_Mixin, CDKey_Mixin, FullReloadCog):
             account_id=account_id,
             cookie_token=cookie_token
         )
-        cookie_str = codeblock(
+        cookie_str = Codeblock(
             "\n".join(f"{k:>12}: {v}"for k, v in cookies.items()),
             lang="yaml"
         )

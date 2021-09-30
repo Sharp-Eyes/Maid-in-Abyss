@@ -57,13 +57,14 @@ def nested_get(d: dict, *keys: list, ret: Any = None):
     return d.get(keys[0], ret)
 
 
-def create_codeblock(s: str, lang: str = ""):
-    return f"```{lang}\n{s}```"
-
-
 def get_bot_color(bot: commands.Bot, guild: disnake.Guild):
     member = guild.get_member(bot.user.id)
     return member.top_role.color
+
+
+def create_interaction_identifier(inter: disnake.ApplicationCommandInteraction):
+    """Create a unique identifier for an interaction."""
+    return "{0.data.name}{0.author.id}{0.guild.id}".format(inter)
 
 
 # Extension management
@@ -151,12 +152,3 @@ def deep_update_json(
         file.truncate()             # Cut off any remaining contents
 
     return data
-
-
-def create_interaction_identifier(inter: disnake.ApplicationCommandInteraction):
-    """Create a unique identifier for an interaction."""
-    return "{0.data.name}{0.author.id}{0.guild.id}".format(inter)
-
-
-def codeblock(content: str, *, lang: str):
-    return f"```{lang}\n{content}\n```"
