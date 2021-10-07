@@ -1,4 +1,5 @@
-from typing import Any
+import datetime
+from typing import Any, Union
 
 import disnake
 from disnake.ext import commands
@@ -6,6 +7,9 @@ from disnake.ext import commands
 from collections.abc import Mapping
 import re
 from os import walk
+import json
+from bs4 import BeautifulSoup, NavigableString
+from functools import partial
 
 
 DEFAULT_EXT_DIR_BLACKLIST = r"__.*"
@@ -48,23 +52,47 @@ def deep_update(D: dict, U: dict, *, update_None: bool = True, update_falsy: boo
     return U
 
 
-def nested_get(d: dict, *keys: list, ret: Any = None):
+def nested_get(d: dict, *keys: list, ret: Any = None) -> Any:
     """Get data from a nested dict by supplying a list of keys.
     Returns :param:`ret` if nothing could be found.
     """
+    if not isinstance(d, dict):
+        return ret
     if len(keys) > 1:
         return nested_get(d.get(keys[0], {}), *keys[1:], ret=ret)
     return d.get(keys[0], ret)
 
 
-def get_bot_color(bot: commands.Bot, guild: disnake.Guild):
+def get_bot_color(bot: commands.Bot, guild: disnake.Guild) -> disnake.Colour:
     member = guild.get_member(bot.user.id)
     return member.top_role.color
 
 
-def create_interaction_identifier(inter: disnake.ApplicationCommandInteraction):
+def create_interaction_identifier(inter: disnake.ApplicationCommandInteraction) -> str:
     """Create a unique identifier for an interaction."""
     return "{0.data.name}{0.author.id}{0.guild.id}".format(inter)
+
+
+def create_time_markdown(time: Union[int, datetime.datetime], format: str) -> str:
+    if isinstance(time, datetime.datetime):
+        time = int(time.timestamp())
+    spec = {
+        "short datetime": "f",
+        "long datetime": "F",
+        "short date": "d",
+        "long date": "D",
+        "short time": "t",
+        "long time": "T",
+        "relative time": "R"
+    }
+    if format not in spec.values():
+        format = spec.get(format.lower())
+        if not format:
+            raise KeyError(
+                f"format {format} doesn't exist. Try any of "
+                + "; ".join(f"{k}, {v}" for k, v in spec.items())
+            )
+    return f"<t:{time}:{format}>"
 
 
 # Extension management
@@ -115,8 +143,6 @@ def custom_modules_from_globals(glb: dict) -> set:
 
 
 # JSON helpers
-import json as _json
-
 
 def deep_update_json(
     path: str,
@@ -144,11 +170,73 @@ def deep_update_json(
     """
 
     with open(path, "r+") as file:
-        data = _json.load(file)     # Read file (advances pointer)
+        data = json.load(file)     # Read file (advances pointer)
         deep_update(data, U, update_None=update_None, update_falsy=update_falsy)
 
         file.seek(0)                # Return pointer to beginning of file
-        _json.dump(data, file)      # Start overwriting at pointer (beginning)
+        json.dump(data, file)      # Start overwriting at pointer (beginning)
         file.truncate()             # Cut off any remaining contents
 
     return data
+
+
+# BS4 helpers
+def parse_soup_text(
+    soup: BeautifulSoup,
+    *,
+    href_prepend: str = "",
+    strip: bool = True,
+    split: bool = False,
+    sep: str = " ",
+    ignore: list[str] = list()
+):
+    result = [[]]
+    get_text = partial(soup.get_text, strip=strip, separator=sep)
+
+    def on_a(a: BeautifulSoup):
+        # Possibly add <img> tag handling
+        t = get_text(a)
+        if not t:
+            return
+        h = href_prepend + a['href']
+        result[-1].append(f"[{t}]({h})")
+
+    def on_b(b: BeautifulSoup):
+        t = get_text(b)
+        if not t:
+            return
+        result[-1].append(f"*{t}*")
+
+    def on_br(br: BeautifulSoup):
+        if result:
+            result.extend([["\n"], []])
+
+    state = {
+        "a": on_a,
+        "b": on_b,
+        "br": on_br
+    }
+
+    def recurse(soup: BeautifulSoup):
+
+        if isinstance(soup, NavigableString):
+            t = get_text(soup)
+            if t:
+                result[-1].append(t)
+            return
+
+        for child in soup.children:
+            etype = child.name
+            if etype in ignore:
+                continue
+
+            todo = state.get(etype)
+            if not todo:
+                recurse(child)
+                continue
+
+            todo(child)
+
+    recurse(soup)
+
+    return "".join(sep.join(r) for r in result)

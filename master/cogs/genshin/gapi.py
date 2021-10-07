@@ -3,7 +3,7 @@
 
 
 from .__gapi import (
-    GUILDS,
+    HEADERS, GUILDS,
     CheckIn_Mixin, CDKey_Mixin,
     get_guild_notif_channel, get_user_notif_guilds, validate_cdkey_cookies,
     read_user_data, get_user_cookies
@@ -173,7 +173,7 @@ class GenshinAPI_Cog(CheckIn_Mixin, CDKey_Mixin, FullReloadCog):
         response = inter.response
         author_id = inter.author.id
 
-        cookies = self.get_user_cookies(user_id=author_id)
+        cookies = get_user_cookies(user_id=author_id)
         if not validate_cdkey_cookies(cookies):
             return await response.send_message(
                 "To be able to redeem rewards for redeem codes/cdkeys, your `account_id` and "
@@ -226,7 +226,7 @@ class GenshinAPI_Cog(CheckIn_Mixin, CDKey_Mixin, FullReloadCog):
         """
         # Remove the current interaction from cache
         identifier = create_interaction_identifier(inter)
-        Gapi_Auth_Autocomp.cache.pop(identifier)
+        Gapi_Auth_Autocomp.cache.pop(identifier, None)
 
         response = inter.response
         view = Gapi_Auth_Confirmation()
@@ -239,7 +239,7 @@ class GenshinAPI_Cog(CheckIn_Mixin, CDKey_Mixin, FullReloadCog):
             cookie_token=cookie_token
         )
         cookie_str = Codeblock(
-            "\n".join(f"{k:>12}: {v}"for k, v in cookies.items()),
+            "\n".join(f"{k:>12}: {v}" for k, v in cookies.items()),
             lang="yaml"
         )
 
@@ -293,7 +293,7 @@ class GenshinAPI_Cog(CheckIn_Mixin, CDKey_Mixin, FullReloadCog):
         individual_data = read_user_data().get(str(author.id), {})
         try:
             await self.do_checkin_for(
-                user=author,
+                author,
                 individual_data=individual_data
             )
         except GenshinAPIError as e:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from typing import TypeVar, Callable
+from typing import TypeVar, Callable, Iterable, Any
 
 
 @dataclass
@@ -13,6 +13,7 @@ class Paths:
     guild_data = root + "guild_data.json"
     user_data = root + "user_data.json"
     cogs = root + 'cogs\\'
+    events = root + 'events.json'
 
 
 # Custom classes
@@ -45,7 +46,66 @@ class defaultlist(list[_FT]):
             return n
 
 
-class Codeblock(str):
+class sortedlist:
+
+    def __init__(self, key=None, *args: _FT):
+        if args:
+            self.data = [i for i in args[0]] if isinstance(args[0], Iterable) else list(args)
+        else:
+            self.data: list[_FT] = []
+        self.key = key
+
+    def __repr__(self) -> str:
+        return "sortedlist(" + ", ".join(str(i) for i in self.data) + ")"
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def __getitem__(self, i) -> _FT:
+        return self.data[i]
+
+    def _insert(self, i, item: _FT) -> sortedlist[_FT]:
+        self.data.insert(i, item)
+        return self
+
+    def _cmp(self, L, M, U=None):
+        if not self.key:
+            return L < M and (M <= U if U is not None else True)
+        k = self.key
+        return k(L) < k(M) and (k(M) <= k(U) if U is not None else True)
+
+    def insert(self, item: _FT) -> sortedlist[_FT]:
+        # Binary search
+        L = 0
+        U = len(self) - 1
+
+        if not self.data:
+            self.data.append(item)
+            return self
+
+        if self._cmp(self.data[U], item):
+            self.data.append(item)
+            return self
+        if self._cmp(item, self.data[L]):
+            return self._insert(0, item)
+
+        while True:
+            M = (U + L) // 2
+            print(self.data, L, M, U)
+
+            if self._cmp(self.data[M], item, self.data[M + 1]):
+                return self._insert(M + 1, item)
+
+            if self._cmp(self.data[M], item):
+                L = M + 1
+            else:
+                U = M - 1
+
+            if U < L:
+                print("wat")
+
+
+class Codeblock:
 
     def __init__(self, content: str, *, lang: str = None):
         if lang is not None:
@@ -58,3 +118,12 @@ class Codeblock(str):
 
     def __str__(self):
         return f"```{self.lang}\n{self.content}```"
+
+    def __repr__(self):
+        return str(self)
+
+    def __add__(self, other):
+        return str(self) + other
+
+    def __radd__(self, other):
+        return other + str(self)

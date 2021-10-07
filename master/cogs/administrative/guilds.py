@@ -1,12 +1,25 @@
+import disnake
+from disnake.channel import TextChannel
 from disnake.ext import commands
+from disnake.ext.commands import Param
+from disnake import ApplicationCommandInteraction as Interaction
+
+from typing import Literal
 import json
+from datetime import datetime
+from pytz import UTC
 
 from main import DEFAULT_PREFIX
-from utils.helpers import deep_update
+from utils.helpers import deep_update, deep_update_json
 from utils.classes import Paths
 
 DEFAULT_PFX_STR = ", ".join(DEFAULT_PREFIX)
 DEFAULT_PFX_STR_STYLIZED = ", ".join(f"`{p}`" for p in DEFAULT_PREFIX)
+
+GUILDS = [701039771157397526, 511630315039490076]
+
+with open(Paths.guild_data) as guild_file:
+    gdata = json.load(guild_file)
 
 
 class Guild_Cog(commands.Cog):
@@ -38,7 +51,7 @@ class Guild_Cog(commands.Cog):
             "`[1]` makes me respond to both `.<command>` and `maid.<command>`;\n"
             "`[2]` makes me respond only to `.<command>`;\n"
             "`[3]` makes me respond to my default prefix(es): "
-            + {', '.join(f'`{p}<command>`' for p in DEFAULT_PREFIX)}
+            + ', '.join(f'`{p}<command>`' for p in DEFAULT_PREFIX)
             + "."
         )
     )
@@ -78,6 +91,49 @@ class Guild_Cog(commands.Cog):
 
             pfx_str = ", ".join(f"`{p}`" for p in prefixes)
             await ctx.send(f"I currently respond to the following prefixes: {pfx_str}.")
+
+    @commands.command(name="age")
+    async def _age(self, ctx, guild: disnake.Guild):
+        dt = guild.created_at
+        now = datetime.now(UTC)
+        diff = int((now - dt).total_seconds())
+        mins, secs = divmod(diff, 60)
+        hours, mins = divmod(mins, 60)
+        days, hours = divmod(hours, 24)
+        years, days = divmod(days, 365)
+        dt_str = dt.strftime("%A, %e %b %Y, %T")
+        await ctx.send(
+            f"Server {guild.name} was created on {dt_str}.\nIt has been live for {years} years, "
+            f"{days} days, {hours} hours, {mins} minutes, and {secs} seconds."
+        )
+
+    @commands.slash_command(
+        name="notifications",
+        guild_ids=GUILDS
+    )
+    @commands.has_permissions(administrator=True)
+    async def notif_main(
+        self,
+        inter: Interaction,
+        action: Literal["set", "view", "stop"] = Param(
+            desc="Whether to view notification channels, or add/remove notifications in a channel."
+        ),
+        channel: TextChannel = Param(
+            "",
+            desc="The channel to view/modify. Leave blank when viewing to view all.",
+        ),
+        type: Literal["genshin api", "status"] = Param(
+            "",
+            desc="The type of channel you wish to view/modify. "
+            "Leave blank when viewing to view all.",
+        )
+    ):
+        """Change which notifications to receive, and where to receive them."""
+        await inter.response.send_message(f"{action=}, {channel=}, {type=}")
+
+        if type == "status":
+            new_data = {str(inter.guild_id): {"status channel": {"id": channel.id}}}
+            deep_update_json(Paths.guild_data, new_data)
 
 
 def setup(bot: commands.Bot):

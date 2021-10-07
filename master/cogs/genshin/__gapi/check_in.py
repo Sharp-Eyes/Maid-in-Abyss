@@ -7,7 +7,7 @@ from disnake.ext import tasks
 from disnake.ext.commands import Bot
 
 import datetime
-from typing import Union
+from typing import Any, Union
 from collections import defaultdict
 
 from utils.helpers import Paths, nested_get, deep_update_json
@@ -18,7 +18,7 @@ logger = logging.getLogger("GAPI")
 
 
 __all__ = ["CheckIn_Mixin"]
-
+disnake.User
 
 DAILY_CLAIM_TIME = datetime.time.fromisoformat("16:00:02")  # UTC
 
@@ -38,9 +38,10 @@ class CheckIn_Mixin(Genshin_API):
     )
 
     async def do_checkin_for(
-        self, *,
+        self,
         user: Union[disnake.Member, disnake.User],
-        individual_data: dict,
+        *,
+        individual_data: dict[str, Any],
     ) -> bool:
         """Claim Hoyolab daily rewards for a user by making the proper API calls.
 
@@ -133,6 +134,9 @@ class CheckIn_Mixin(Genshin_API):
         for user_id, data in user_data.items():
             user = self.bot.get_user(int(user_id))
             guilds = get_user_notif_guilds(user_id)
+
+            if not user:
+                continue
 
             try:
                 await self.do_checkin_for(

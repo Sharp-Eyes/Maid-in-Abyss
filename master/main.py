@@ -1,3 +1,5 @@
+# TODO: Move cog loading outside of on_ready, maybe disable cog reloading on dc, too.
+
 import sys
 import traceback
 import json
@@ -80,15 +82,5 @@ if __name__ == "__main__":
         await bot._sync_application_commands()
 
         print(f"\n> Encountered {exceptions} exceptions in loading cogs.\n")
-
-    # @bot.event
-    # async def on_disconnect():
-    #     cogs: dict[str, commands.Cog] = bot.cogs.copy()
-    #     for cog in cogs.values():
-    #         for item in cog.__dict__.values():
-    #             if not isinstance(item, Loop): continue
-    #             if item.is_running:
-    #                 item.cancel()
-    #                 print(f"Cancelling task <{item.__name__}>")
 
     bot.run(token, reconnect=True)

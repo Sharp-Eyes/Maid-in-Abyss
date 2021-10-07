@@ -9,6 +9,7 @@ import re
 from typing import Any
 from types import ModuleType
 from collections import defaultdict
+from inspect import iscoroutinefunction
 
 from utils.classes import defaultlist
 
@@ -22,6 +23,25 @@ class CustomBot(commands.Bot):
     async def close(self):
         await self.session.close()
         return await super().close()
+
+
+class AsyncInitMixin(commands.Cog):
+    """A cog mixin that runs a coroutine method `init` along with the default `__init__`."""
+
+    async def init(self) -> None:
+        """Runs along with `__init__`."""
+
+    def __new__(cls, *args, **kwargs):
+        bot: commands.Bot = args[0]
+
+        self = super().__new__(cls, *args, **kwargs)
+
+        if not iscoroutinefunction(self.init):
+            bot.loop.run_in_executor(None, self.init)
+        else:
+            bot.loop.create_task(self.init())
+
+        return self
 
 
 class FullReloadCog(commands.Cog):

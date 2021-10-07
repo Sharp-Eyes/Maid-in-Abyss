@@ -16,6 +16,7 @@ from typing import Union
 
 from utils.classes import Paths
 from utils.helpers import nested_get
+from utils.overrides import CustomBot
 
 import logging
 logger = logging.getLogger("GAPI")
@@ -28,11 +29,6 @@ __all__ = (
     "GUILDS"
 )
 
-# Constants
-OS_URL = "https://hk4e-api-os.mihoyo.com/event/sol/"
-OS_ACT_ID = "e202102251931481"
-
-BASE_URL = "https://bbs-api-os.hoyolab.com/"
 DS_SALT = "6cqshh5dhw73bzxn20oexa9k516chk7s"
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -84,6 +80,7 @@ def get_API_date() -> str:
 
 class Genshin_API:
     """A class that organizes helper functions for HoYoLAB API calls."""
+    bot: CustomBot
 
     async def fetch_endpoint(
         self,
@@ -112,28 +109,29 @@ class Genshin_API:
             Any additional keyword arguments are passed as JSON parameters in the request.
             Mainly used to provide data in POST requests.
         """
+
+        session = self.bot.session
         headers = HEADERS.copy()
         headers["ds"] = generate_ds_token()
 
-        async with aiohttp.ClientSession() as session:
-            request: Union[session.get, session.post] = getattr(session, request_type)
-            async with request(
-                endpoint_url,
-                headers=headers,
-                cookies=cookies,
-                json=params
-            ) as response:
+        request: Union[session.get, session.post] = getattr(session, request_type)
+        async with request(
+            endpoint_url,
+            headers=headers,
+            cookies=cookies,
+            json=params
+        ) as response:
 
-                try:
-                    response_data: dict = await response.json()
-                    logger.log(1, response_data)
-                except Exception as e:
-                    # TODO: figure out which exception to intercept here (for non-json output)
-                    response_data: str = await response.read()
-                    raise UnintelligibleResponseError(response_data)
+            try:
+                response_data: dict = await response.json()
+                logger.log(1, response_data)
+            except Exception as e:
+                # TODO: figure out which exception to intercept here (for non-json output)
+                response_data: str = await response.read()
+                raise UnintelligibleResponseError(response_data)
 
-            if response_data["retcode"] != 0:
-                validate_API_response(response_data)
+        if response_data["retcode"] != 0:
+            validate_API_response(response_data)
 
         return response_data["data"]
 
@@ -149,9 +147,9 @@ class Genshin_API:
         """Check whether the user whose authorization cookies were provided can claim
         their daily rewards.
         """
-        params = {"act_id": OS_ACT_ID}
+        params = {"act_id": "e202102251931481"}
         response = await cls.fetch_endpoint(
-            OS_URL + "info",
+            "https://hk4e-api-os.mihoyo.com/event/sol/info",
             cookies=cookies,
             **params
         )
@@ -174,10 +172,10 @@ class Genshin_API:
 
         params = dict(
             lang="en-us",
-            act_id=OS_ACT_ID
+            act_id="e202102251931481"
         )
         response = await cls.fetch_endpoint(
-            OS_URL + "sign",
+            "https://hk4e-api-os.mihoyo.com/event/sol/sign",
             request_type="post",
             cookies=cookies,
             **params
@@ -188,7 +186,7 @@ class Genshin_API:
     async def redeem_cdkey(cls, *, cookies, cdkey):
         accs = [
             account
-            for account in cls.get_game_accounts(cookies=cookies)
+            for account in await cls.get_game_accounts(cookies=cookies)
             if account["level"] >= 10
         ]
         const_params = dict(
@@ -196,13 +194,18 @@ class Genshin_API:
             game_biz="hk4e_global",
             lang="en"
         )
+        filtered_cookies = {
+            k: v
+            for k, v in cookies.items()
+            if k in ["account_id", "cookie_token"]
+        }
 
         for i, acc in enumerate(accs):
             if i:
                 await asyncio.sleep(5)    # Ratelimit
             await cls.fetch_endpoint(
                 "https://hk4e-api-os.mihoyo.com/common/apicdkey/api/webExchangeCdkey",
-                cookies=cookies,
+                cookies=filtered_cookies,
                 uid=acc["game_uid"],
                 region=acc["region"],
                 **const_params

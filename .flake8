@@ -7,3 +7,4 @@ per-file-ignores =
     master/utils/overrides.py:E701
     master/utils/helpers.py:E701,E402
     master/main.py:E701
+    */__init__.py:F403

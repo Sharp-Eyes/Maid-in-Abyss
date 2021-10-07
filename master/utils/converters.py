@@ -1,5 +1,4 @@
 from disnake.ext import commands
-BadArgument = commands.errors.BadArgument
 
 import re
 
@@ -7,20 +6,20 @@ from .exceptions import ExtensionNotFound
 from .helpers import search_all_extensions
 
 Converter = commands.Converter
-
+BadArgument = commands.errors.BadArgument
 
 
 class ExtensionConverter(Converter[str]):
     """Converts to a :class:`str` representing an extension, e.g. 'cogs.administrative.help'.
     Takes optional parameters `loaded` and `unloaded` to specify which extensions should be checked.
-    
+
     Parameters:
     -----------
     loaded: :class:`bool`
-        Declares whether or not loaded cogs are to be searched for the provided conversion argument.
+        Declares whether or not to search loaded cogs for the provided conversion argument.
     unloaded: :class:`bool`
-        Declares whether or not unloaded cogs are to be searched for the provided conversion argument.
-    
+        Declares whether or not to search unloaded cogs for the provided conversion argument.
+
     at least one of these must be True.
 
     raise_unexpected: :class:`bool`
@@ -31,7 +30,7 @@ class ExtensionConverter(Converter[str]):
     def __init__(self, *, loaded=True, unloaded=True, raise_unexpected=True):
         if not (loaded or unloaded):
             raise Exception("At least one of 'loaded' and 'unloaded' must be True.")
-        
+
         self.loaded = loaded
         self.unloaded = unloaded
         self.raise_unexpected = raise_unexpected
@@ -52,7 +51,8 @@ class ExtensionConverter(Converter[str]):
 
             # Next see if it's among loadable extensions:
             for extension in search_all_extensions():
-                if extension in extensions: continue
+                if extension in extensions:
+                    continue
                 if re.match(pat, extension):
                     if self.unloaded:
                         return extension
