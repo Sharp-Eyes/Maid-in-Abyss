@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from .exceptions import (
     validate_API_response, UnintelligibleResponseError, FirstSign,
     AlreadySigned
@@ -16,7 +18,6 @@ from typing import Union
 
 from utils.classes import Paths
 from utils.helpers import nested_get
-from utils.overrides import CustomBot
 
 import logging
 logger = logging.getLogger("GAPI")
@@ -25,7 +26,7 @@ logger = logging.getLogger("GAPI")
 __all__ = (
     "get_API_datetime",
     "get_API_date",
-    "Genshin_API",
+    "Hoyolab_API",
     "GUILDS"
 )
 
@@ -44,6 +45,17 @@ HEADERS = {
     # recommended headers
     "user-agent": USER_AGENT
 }
+
+DAILY_SIGNIN_URL = {
+    "Honkai Impact": "https://api-os-takumi.mihoyo.com/event/mani/",
+    "Genshin Impact": "https://hk4e-api-os.mihoyo.com/event/sol/"
+}
+ACT_ID = {
+    "Honkai Impact": "e202110291205111",
+    "Genshin Impact": "e202102251931481"
+}
+
+ValidRequestType = Union[aiohttp.ClientSession.get, aiohttp.ClientSession.post]
 
 # Predetermine guilds for local slash commands
 with open(Paths.guild_data) as guild_file:
@@ -78,9 +90,19 @@ def get_API_date() -> str:
     return get_API_datetime().strftime("%Y-%m-%d")
 
 
-class Genshin_API:
+class Hoyolab_API:
     """A class that organizes helper functions for HoYoLAB API calls."""
-    bot: CustomBot
+
+    def __init__(self, session: aiohttp.ClientSession):
+        self.session = session
+
+    @property
+    def date(self):
+        """the current date in yyyy-mm-dd, as is returned by the HoYoLAB API,
+        attuned with HoYoLAB server time (tz: Asia/Shanghai).
+        """
+        API_datetime = datetime.datetime.now(pytz.timezone("Asia/Shanghai"))
+        return API_datetime.strftime("%Y-%m-%d")
 
     async def fetch_endpoint(
         self,
@@ -110,11 +132,10 @@ class Genshin_API:
             Mainly used to provide data in POST requests.
         """
 
-        session = self.bot.session
         headers = HEADERS.copy()
         headers["ds"] = generate_ds_token()
 
-        request: Union[session.get, session.post] = getattr(session, request_type)
+        request: ValidRequestType = getattr(self.session, request_type)
         async with request(
             endpoint_url,
             headers=headers,
@@ -143,13 +164,13 @@ class Genshin_API:
         )
         return data["list"]
 
-    async def daily_claim_status(cls, *, cookies):
+    async def daily_claim_status(cls, game, *, cookies: dict[str, str]):
         """Check whether the user whose authorization cookies were provided can claim
         their daily rewards.
         """
-        params = {"act_id": "e202102251931481"}
+        params = {"act_id": ACT_ID[game]}
         response = await cls.fetch_endpoint(
-            "https://hk4e-api-os.mihoyo.com/event/sol/info",
+            DAILY_SIGNIN_URL[game] + "info",
             cookies=cookies,
             **params
         )
@@ -167,15 +188,15 @@ class Genshin_API:
 
         return response
 
-    async def daily_claim_exec(cls, *, cookies):
+    async def daily_claim_exec(cls, game, *, cookies: dict[str, str]):
         """Sign into Hoyolab to claim daily rewards."""
 
-        params = dict(
-            lang="en-us",
-            act_id="e202102251931481"
-        )
+        params = {
+            "lang": "en-us",
+            "act_id": ACT_ID[game]
+        }
         response = await cls.fetch_endpoint(
-            "https://hk4e-api-os.mihoyo.com/event/sol/sign",
+            DAILY_SIGNIN_URL[game] + "sign",
             request_type="post",
             cookies=cookies,
             **params
@@ -189,11 +210,11 @@ class Genshin_API:
             for account in await cls.get_game_accounts(cookies=cookies)
             if account["level"] >= 10
         ]
-        const_params = dict(
-            cdkey=cdkey,
-            game_biz="hk4e_global",
-            lang="en"
-        )
+        const_params = {
+            "cdkey": cdkey,
+            "game_biz": "hk4e_global",
+            "lang": "en"
+        }
         filtered_cookies = {
             k: v
             for k, v in cookies.items()

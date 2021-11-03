@@ -1,3 +1,5 @@
+# TODO: Rename all Genshin stuff to Hoyolab
+
 all = (
     "GenshinAPIError",
     "CookieError",
