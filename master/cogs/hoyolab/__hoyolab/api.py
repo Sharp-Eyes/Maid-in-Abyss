@@ -14,7 +14,7 @@ import string
 import hashlib
 import json
 from numpy import random
-from typing import Union
+from typing import Union, Literal
 
 from utils.classes import Paths
 from utils.helpers import nested_get
@@ -27,7 +27,8 @@ __all__ = (
     "get_API_datetime",
     "get_API_date",
     "Hoyolab_API",
-    "GUILDS"
+    "GUILDS",
+    "ValidGame",
 )
 
 DS_SALT = "6cqshh5dhw73bzxn20oexa9k516chk7s"
@@ -56,6 +57,8 @@ ACT_ID = {
 }
 
 ValidRequestType = Union[aiohttp.ClientSession.get, aiohttp.ClientSession.post]
+ValidGame = Literal["Honkai Impact", "Genshin Impact"]
+
 
 # Predetermine guilds for local slash commands
 with open(Paths.guild_data) as guild_file:

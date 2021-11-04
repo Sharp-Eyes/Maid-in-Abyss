@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from disnake.ext import commands
 
 import aiohttp
@@ -5,30 +7,97 @@ import sys
 import os
 import importlib.util
 import re
+import motor.motor_asyncio as motor
 
 from typing import Any
 from types import ModuleType
 from collections import defaultdict
-from inspect import iscoroutinefunction
+from inspect import iscoroutinefunction, isclass
+from dotenv import load_dotenv
+from pydantic import BaseModel, root_validator
 
 from utils.classes import defaultlist
+
+
+load_dotenv()
+user, pw, db_default = os.getenv("MONGO_USER"), os.getenv("MONGO_PASS"), os.getenv("MONGO_DB")
+DB_URI = (
+    f"mongodb+srv://{user}:{pw}@maid-in-abyss.kdpxk.mongodb.net/{db_default}"
+    "?retryWrites=true&w=majority"
+)
 
 
 class CustomBot(commands.Bot):
 
     async def start(self, token: str, *, reconnect: bool = True) -> None:
         self.session = aiohttp.ClientSession()
+        self.db = motor.AsyncIOMotorClient(DB_URI)
         return await super().start(token, reconnect=reconnect)
 
     async def close(self):
         await self.session.close()
+        await self.db.close()
         return await super().close()
+
+
+class PropagatingModel(BaseModel):
+    """Pydantic model that propagates:
+    1. ClassVars defined in the parent model to all child-models that
+        also have the ClassVar annotated.
+    2. Fields defined in the parent model with Field(..., propagate=True)
+        to all child models that have a field with the same name and type.
+    """
+
+    @root_validator(pre=True, allow_reuse=True)
+    def propagate(cls, values):
+        for field in cls.__fields__.values():
+            field_type = field.type_
+            if not (isclass(field_type) and issubclass(field_type, BaseModel)):
+                continue
+
+            # Propagate ClassVars
+            for class_var in cls.__class_vars__:
+                # Make sure the ClassVars are actually defined
+                if class_var not in cls.__dict__:
+                    raise AttributeError(
+                        f"ClassVar {class_var} has not yet been defined, thus cannot be propagated."
+                    )
+                if class_var in field_type.__class_vars__:
+                    # If the ClassVar is also annotated in a child model, propagate it
+                    setattr(field_type, class_var, getattr(cls, class_var))
+
+            # Propagate Fields with propagate=True
+            for sub_field in field_type.__fields__.values():
+                prop_field = cls.__fields__.get(sub_field.name)
+                if not prop_field:
+                    # Check for matching field names between current and child model
+                    continue
+                if prop_field.type_ is not sub_field.type_:
+                    # Make sure types match
+                    continue
+                # Propagate field value to child model
+                values[field.alias][prop_field.alias] = values[prop_field.alias]
+
+        return values
+
+    def dict(self, **kwargs):
+        hidden_fields = {
+            attribute_name
+            for attribute_name, model_field in self.__fields__.items()
+            if model_field.field_info.extra.get("hidden") is True
+        }
+        if kwargs.get("exclude"):
+            kwargs["exclude"].update(hidden_fields)
+        else:
+            kwargs["exclude"] = hidden_fields
+
+        return super().dict(**kwargs)
 
 
 class AsyncInitMixin(commands.Cog):
     """A cog mixin that runs a coroutine method `init` along with the default `__init__`."""
 
-    async def init(self) -> None:
+    async def __async_init__(self) -> None:
         """Runs along with `__init__`."""
 
     def __new__(cls, *args, **kwargs):
@@ -36,10 +105,10 @@ class AsyncInitMixin(commands.Cog):
 
         self = super().__new__(cls, *args, **kwargs)
 
-        if not iscoroutinefunction(self.init):
-            bot.loop.run_in_executor(None, self.init)
+        if not iscoroutinefunction(self.__async_init__):
+            bot.loop.run_in_executor(None, self.__async_init__)
         else:
-            bot.loop.create_task(self.init())
+            bot.loop.create_task(self.__async_init__())
 
         return self
 
