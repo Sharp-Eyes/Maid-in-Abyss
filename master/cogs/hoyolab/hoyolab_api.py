@@ -1,3 +1,8 @@
+# Massive props to thesadru for figuring out all the genshin api endpoints and
+# helping me on my way to figure out the honkai endpoint. Code mostly adapted from
+# https://github.com/thesadru/genshinstats; also check out
+# https://github.com/thesadru/genshin.py
+
 from __future__ import annotations
 
 import disnake
@@ -12,13 +17,12 @@ from collections import defaultdict
 from typing import Optional
 from pydantic import ValidationError
 
-from utils.overrides import AsyncInitMixin, FullReloadCog, CustomBot
+from utils.bot import FullReloadCog
+from utils.overrides import AsyncInitMixin, CustomBot
+from models.hoyolab import DiscordUserDataModel, HoyolabAccountModel, CookieModel
 
-from .__hoyolab import (
-    DiscordUserDataModel, HoyolabAccountModel, CookieModel,
-    Hoyolab_API, ValidGame
-)
-from .__hoyolab.exceptions import AlreadySigned, FirstSign, GenshinAPIError
+from .__hoyolab_utils import Hoyolab_API, ValidGame
+from .__hoyolab_utils.exceptions import AlreadySigned, FirstSign, HoyolabAPIError
 
 import logging
 logger = logging.getLogger("Hoyolab_API")
@@ -41,7 +45,7 @@ class UserSigninResult:
         description="\u200b"
     )
 
-    def __init__(self, *, suppressed: tuple[GenshinAPIError] = tuple()):
+    def __init__(self, *, suppressed: tuple[HoyolabAPIError] = tuple()):
         self.results: defaultdict[str, list[str]] = defaultdict(list)
         self.suppressed = suppressed
 
@@ -49,7 +53,7 @@ class UserSigninResult:
         self,
         account: HoyolabAccountModel,
         game: ValidGame,
-        result: Optional[GenshinAPIError]
+        result: Optional[HoyolabAPIError]
     ) -> None:
         """Add a sign-in result for the user. For param result, pass the error
         returned by the claim function in case it failed, otherwise pass None
@@ -128,6 +132,7 @@ class HoyolabApiCog(AsyncInitMixin, FullReloadCog):
         if self.hoyo_signin_auto.is_running():
             self.hoyo_signin_auto.cancel()
 
+    @commands.is_owner()
     @commands.command(name="getcache")
     async def getcache(self, ctx: commands.Context, user: disnake.User = None):
         if not user:
@@ -137,12 +142,6 @@ class HoyolabApiCog(AsyncInitMixin, FullReloadCog):
             if user_data.discord_id == user.id:
                 break
         return await ctx.send(user_data)
-
-    @commands.command(name="try")
-    async def trycache(self, ctx: commands.Context):
-        return await ctx.send(
-            f"{self.user_cache[0].API}, {self.user_cache[0].hoyolab.API}"
-        )
 
     @commands.slash_command(name="hoyolab", guild_ids=[701039771157397526, 511630315039490076])
     async def hoyo_main(self, inter: Interaction):
@@ -307,11 +306,11 @@ class HoyolabApiCog(AsyncInitMixin, FullReloadCog):
 
                 try:
                     await account.hoyolab_signin(game, force=True)
-                except GenshinAPIError as e:
+                except HoyolabAPIError as e:
                     author = inter.author
                     result.add_user_account_result(account, game, e)
 
-                    if type(e) is GenshinAPIError:
+                    if type(e) is HoyolabAPIError:
                         await author.send(
                             "An unknown error occurred in claiming rewards for your account "
                             f"{account.name}`. Please try claiming your rewards manually using "
@@ -356,6 +355,11 @@ class HoyolabApiCog(AsyncInitMixin, FullReloadCog):
             if curr in game
         ]
 
+    @commands.command(name="force_autoclaim")
+    async def force_autoclaim(self, ctx):
+        # if not self.hoyo_signin_auto.is_running:
+        await self.hoyo_signin_auto()
+
     @loop(time=[HOYOLAB_CLAIM_RESET])
     async def hoyo_signin_auto(self):
         logger.log(1, "Claiming daily check-in rewards")
@@ -370,10 +374,10 @@ class HoyolabApiCog(AsyncInitMixin, FullReloadCog):
                 for game in account.games:
                     try:
                         await account.hoyolab_signin(game)
-                    except GenshinAPIError as e:
+                    except HoyolabAPIError as e:
                         result.add_user_account_result(account, game, e)
 
-                        if type(e) is GenshinAPIError:
+                        if type(e) is HoyolabAPIError:
                             await discord_user.send(
                                 "An unknown error occurred in claiming rewards for your account "
                                 f"{account.name}`. Please try claiming your rewards manually using "
