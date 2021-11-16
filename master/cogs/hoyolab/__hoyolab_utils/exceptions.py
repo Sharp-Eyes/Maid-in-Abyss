@@ -1,7 +1,7 @@
 # TODO: Rename all Genshin stuff to Hoyolab
 
 all = (
-    "GenshinAPIError",
+    "HoyolabAPIError",
     "CookieError",
     "CodeRedeemError",
     "validate_API_response",
@@ -11,7 +11,7 @@ all = (
 )
 
 
-class GenshinAPIError(Exception):
+class HoyolabAPIError(Exception):
     """Base exception for all errors to do with the Genshin API."""
 
     retcode: int = 0
@@ -30,15 +30,15 @@ class GenshinAPIError(Exception):
         return self.message
 
 
-class CookieError(GenshinAPIError):
+class CookieError(HoyolabAPIError):
     """Authorization cookies were either incorrectly provided, or not provided at all."""
 
 
-class TooManyLogins(GenshinAPIError):
+class TooManyLogins(HoyolabAPIError):
     """Attempted to login to the API in too quick succession."""
 
 
-class CodeRedemptionError(GenshinAPIError):
+class CodeRedemptionError(HoyolabAPIError):
     """Error in code redemption; has multiple causes."""
 
 
@@ -93,7 +93,7 @@ def validate_API_response(response: dict):
             "Please enter the missing cookies using `/gwiki auth set` if you wish to be "
             "able to use redeem codes."
         )
-    }.get(response["retcode"], GenshinAPIError())
+    }.get(response["retcode"], HoyolabAPIError())
 
     error.set_response(response)
     raise error
@@ -101,18 +101,18 @@ def validate_API_response(response: dict):
 # Errors not based on retcodes
 
 
-class AlreadySigned(GenshinAPIError):
+class AlreadySigned(HoyolabAPIError):
     """Attempted to claim check-in rewards when this had already been done today."""
 
 
-class FirstSign(GenshinAPIError):
+class FirstSign(HoyolabAPIError):
     """Attempted to claim check-in rewards without first having claimed once manually."""
 
-# class AccountNotFound(GenshinAPIError):
+# class AccountNotFound(HoyolabAPIError):
 #     """Passed an invalid UID """
 
 
-class UnintelligibleResponseError(GenshinAPIError):
+class UnintelligibleResponseError(HoyolabAPIError):
     """API response cannot be converted to json or is otherwise in some unexpected format."""
 
     def __init__(self, response: str):
