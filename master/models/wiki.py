@@ -805,15 +805,15 @@ class StigmataSetModel(GenericWikiModel):
 # Weapons
 
 class IconMapping(Enum):
-    Pistol = "Pistols (Type)"
-    Katana = "Katanas (Type)"
-    Cannon = "Cannons (Type)"
-    Greatsword = "Greatswords (Type)"
-    Cross = "Crosses (Type)"
-    Gauntlet = "Gauntlets (Type)"
-    Scythe = "Scythes (Type)"
-    Lance = "Lances (Type)"
-    Bow = "Bows (Type)"
+    pistol = "Pistols (Type)"
+    katana = "Katanas (Type)"
+    cannon = "Cannons (Type)"
+    greatsword = "Greatswords (Type)"
+    cross = "Crosses (Type)"
+    gauntlet = "Gauntlets (Type)"
+    scythe = "Scythes (Type)"
+    lance = "Lances (Type)"
+    bow = "Bows (Type)"
 
 
 class WeaponSkillModel(GenericWikiModel):
@@ -856,6 +856,10 @@ class WeaponModel(GenericWikiModel):
                 break
 
         return values
+
+    @validator("type", allow_reuse=True)
+    def type_lowercase(cls, type):
+        return type.lower()
 
     def to_embed(self) -> list[Embed]:
         stats = ",\u2003".join(
