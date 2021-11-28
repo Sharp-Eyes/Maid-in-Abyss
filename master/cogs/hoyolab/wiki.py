@@ -9,7 +9,7 @@ from utils.bot import FullReloadCog
 from utils.overrides import CustomBot
 from models.wiki import (
     ValidCategory, QueryResponse,
-    ContentResponseModel, BattlesuitModel, StigmataSetModel,
+    ContentResponseModel, BattlesuitModel, StigmataSetModel, WeaponModel,
     QueryPage  # TODO: remove
 )
 
@@ -109,7 +109,7 @@ class WikiCog(FullReloadCog):
             await inter.edit_original_message(embeds=bsuit.to_embed())
             return
 
-        if page.categories.intersection({
+        elif page.categories.intersection({
             ValidCategory.STIGMA1, ValidCategory.STIGMA2, ValidCategory.STIGMA3,
             ValidCategory.STIGMA4, ValidCategory.STIGMA5
         }):
@@ -119,6 +119,17 @@ class WikiCog(FullReloadCog):
             )
 
             await inter.edit_original_message(embeds=stigs.to_embed())
+            return
+
+        elif page.categories.intersection({
+            ValidCategory.PISTOL, ValidCategory.KATANA, ValidCategory.CANNON,
+            ValidCategory.GREATSWORD, ValidCategory.CROSS, ValidCategory.GAUNTLET,
+            ValidCategory.SCYTHE, ValidCategory.LANCE, ValidCategory.BOW
+        }):
+            data = content.highest_rarity_by_name(page.title).data
+            wep = WeaponModel(**data)
+
+            await inter.edit_original_message(embeds=wep.to_embed())
             return
 
         await inter.edit_original_message(

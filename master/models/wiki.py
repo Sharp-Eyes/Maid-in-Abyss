@@ -93,6 +93,9 @@ class Emoji(Enum, metaclass=EmojiMeta):  # TODO: Move
     STUN = "<:Stun:911355838491402250>"
     PARALYZE = "<:Paralyze:911357753115672576>"
 
+    PASSIVE = "<:Passive:914596917961445416>"
+    ACTIVE = "<:Active:914594001565413378>"
+
 
 class Colours(Enum):
     BIO = 0xffb833
@@ -425,16 +428,22 @@ def convert_tag(match) -> str:
     result = match.groupdict()
     todo = {
         "'''": "**{0}**",
+        "\\'\\'\\'": "**{0}**",
         "br": "\n",
         "increase": "**{0}**",
-        "color-blue": "**{0}**"
+        "color-blue": "**{0}**",
+        "color-orange": "**{0}**\n"
     }[result["t"]]
-    return todo.format(result["m"])
+
+    m = result["m"]
+    if m:
+        m = eliminate_tags(m)
+    return todo.format(m)
 
 
 def eliminate_tags(field: str):
     return regex.sub(
-        r"(?P<t>''')(?P<m>.*?)'''"                                  # '''|x|''' -> **|x|**
+        r"(?P<t>\\?'\\?'\\?')(?P<m>.*?)\\?'\\?'\\?'"                # '''|x|''' -> **|x|**
         r"|<(?P<t>br).*?>(?P<m>\n? ?)"                              # <br> or <br>\n -> \n
         r"|<span class=\"(?P<t>[\w-]+)\">\s?(?P<m>.*?)\s?</span>",  # <span class=|x|>|y|</span>
         convert_tag,
@@ -708,6 +717,8 @@ class SetBonusModel(GenericWikiModel):
 
 
 class StigmataSetModel(GenericWikiModel):
+    # TODO: refactor initialization, remove dependency on ContentResponseModel
+    #       for initialization.
 
     T: Optional[StigmataModel]
     M: Optional[StigmataModel]
@@ -732,7 +743,7 @@ class StigmataSetModel(GenericWikiModel):
 
         return values
 
-    @root_validator()
+    @root_validator(allow_reuse=True)
     def determine_set_attributes(cls, values):
         counts = defaultdict(int)
 
@@ -789,3 +800,85 @@ class StigmataSetModel(GenericWikiModel):
             embeds.append(set_embed)
 
         return embeds
+
+
+# Weapons
+
+class IconMapping(Enum):
+    Pistol = "Pistols (Type)"
+    Katana = "Katanas (Type)"
+    Cannon = "Cannons (Type)"
+    Greatsword = "Greatswords (Type)"
+    Cross = "Crosses (Type)"
+    Gauntlet = "Gauntlets (Type)"
+    Scythe = "Scythes (Type)"
+    Lance = "Lances (Type)"
+    Bow = "Bows (Type)"
+
+
+class WeaponSkillModel(GenericWikiModel):
+
+    name: str
+    effect: str
+
+    def add_field_to_embed(self, embed: Embed) -> Embed:
+
+        is_active = regex.match(r".*\[SP: \d+\].*", self.effect)
+        icon = (Emoji.ACTIVE if is_active else Emoji.PASSIVE).value
+
+        return embed.add_field(
+            name=f"{icon} {self.name}",
+            value=self.effect,
+            inline=False
+        )
+
+
+class WeaponModel(GenericWikiModel):
+
+    name: Wikilink
+    type: str
+    rarity: int
+    ATK: int
+    CRT: int
+    description: str
+    skills: Optional[list[WeaponSkillModel]] = Field(default_factory=list)
+
+    @root_validator(pre=True, allow_reuse=True)
+    def unpack_skills(cls, values):
+
+        values["skills"] = []
+        for i in range(1, 5):
+            try:
+                values["skills"].append(
+                    WeaponSkillModel(name=values[f"skill{i}"], effect=values[f"effect{i}"])
+                )
+            except KeyError:
+                break
+
+        return values
+
+    def to_embed(self) -> list[Embed]:
+        stats = ",\u2003".join(
+            f"**{name}**: {stat}"
+            for name, stat in (
+                ("ATK", self.ATK),
+                ("CRT", self.CRT)
+            )
+            if stat
+        )
+        desc = f"Rarity: {self.rarity * Emoji.STAR.value}\n{self.description}\n\n{stats}"
+
+        title_embed = Embed(
+            description=desc
+        ).set_author(
+            name=self.name.name,
+            url=self.name.link,
+            icon_url=image_link(IconMapping[self.type].value)
+        ).set_thumbnail(
+            url=image_link(f"{self.name.name} ({self.rarity}) (Icon)")
+        )
+
+        skill_embed = reduce(
+            lambda embed, skill: skill.add_field_to_embed(embed), self.skills, Embed()
+        )
+        return [title_embed, skill_embed]
