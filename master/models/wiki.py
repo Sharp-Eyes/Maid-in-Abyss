@@ -5,7 +5,7 @@ from disnake.utils import escape_markdown
 
 import regex
 import urllib
-from collections import Counter
+from collections import defaultdict
 from functools import reduce
 from operator import itemgetter
 from enum import Enum, EnumMeta
@@ -14,6 +14,8 @@ from pydantic import (
 )
 from typing import Any, Optional, Callable
 import wikitextparser as wtp
+
+from utils.helpers import all_equal
 
 try:
     from cfuzzyset import cFuzzySet as FuzzySet
@@ -283,7 +285,6 @@ class Wikilink:
     def __eq__(self, other: Wikilink):
         if not isinstance(other, Wikilink):
             raise TypeError("equality for WikiLinks is only supported for other WikiLinks.")
-
         return self.name == other.name
 
     @classmethod
@@ -441,19 +442,6 @@ def eliminate_tags(field: str):
         0,
         regex.S
     )
-
-
-class PrimaryAttribute(Enum):
-    DMG_ICE = "Ice DMG"
-    DMG_FIRE = "Fire DMG"
-    DMG_LIGHTNING = "Lightning DMG"
-    DMG_PHYS = "Physical"
-
-    BURST = "Burst"
-    TIMEFRAC = "Time Mastery"
-    GATHER = "Gather"
-
-    FREEZE = "Freeze"
 
 
 class ExtraPropagator(BaseModel):
@@ -737,23 +725,30 @@ class StigmataSetModel(GenericWikiModel):
         stigs: dict[str, str] = values["stigs"]
         response_obj: ContentResponseModel = values["content"]
 
-        # Unpack and parse stig data
         for slot, stig in stigs.items():
             stig_data = response_obj.highest_rarity_by_name(stig).data
-            values[slot.upper()] = StigmataModel(slot=slot, **stig_data)
+            if f"{slot.upper()}effect" in stig_data:
+                values[slot.upper()] = StigmataModel(slot=slot, **stig_data)
 
-        # Determine if any set bonuses apply, if so, propagate them from stigmata data
-        for stig, count in Counter(stigs.values()).items():
-            count = int(count)
-            if count < 2:
+        return values
+
+    @root_validator()
+    def determine_set_attributes(cls, values):
+        counts = defaultdict(int)
+
+        for slot in ("T", "M", "B"):
+            stig: StigmataModel = values[slot]
+            if not stig:
                 continue
-            stig_data = response_obj.highest_rarity_by_name(stig).data
-            values["rarity"] = stig_data["rarity"]
-            values["set"] = stig_data["name"]
-            values["set_2"] = {"name": stig_data["2set"], "effect": stig_data["2effect"]}
-            if count == 3:
-                values["set_3"] = {"name": stig_data["3set"], "effect": stig_data["3effect"]}
-            break
+            counts[stig.set.name] += 1
+
+            if counts[stig.set.name] == 2:
+                values["rarity"] = stig.rarity
+                values["set"] = stig.set
+                values["2set"] = stig.set_2
+
+            elif counts[stig.set.name] == 3:
+                values["3set"] = stig.set_3
 
         return values
 
@@ -781,7 +776,8 @@ class StigmataSetModel(GenericWikiModel):
         return set_embed
 
     def to_embed(self) -> list[Embed]:
-        show_rarity = self.T.set == self.M.set == self.B.set
+        defined = [stig for slot in ("T", "M", "B") if (stig := getattr(self, slot))]
+        show_rarity = len(defined) >= 2 and all_equal(defined)
 
         set_embed = self.get_set_bonus(show_rarity=show_rarity)
         embeds = [

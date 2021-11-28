@@ -1,5 +1,5 @@
 import datetime
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 import disnake
 from disnake.ext import commands
@@ -10,10 +10,17 @@ from os import walk
 import json
 from bs4 import BeautifulSoup, NavigableString
 from functools import partial
+from itertools import groupby
 
 
 DEFAULT_EXT_DIR_BLACKLIST = r"__.*"
 DEFAULT_EXT_FILE_BLACKLIST = r"__.*"
+
+
+def all_equal(iterable):
+    "Returns True if all the elements are equal to each other"
+    g = groupby(iterable)
+    return next(g, True) and not next(g, False)
 
 
 def deep_update(D: dict, U: dict, *, update_None: bool = True, update_falsy: bool = True) -> dict:
@@ -111,18 +118,23 @@ def search_all_extensions(
     ----------
     blacklisted_dirs: :class:`str`
         a regex pattern that should match all directory names that are to be ignored.
+        By default, ignores all folders starting with "__".
     blacklisted_files: :class:`str`
         a regex pattern that should match all file names that are to be ignored.
+        By default, ignores all files starting with "__".
     """
 
     for dirpath, _, filenames in walk(Paths.cogs):
         cur_dir = dirpath.rsplit("\\", 1)[1]
-        if re.match(blacklisted_dirs, cur_dir): continue
+        if re.match(blacklisted_dirs, cur_dir):
+            continue
 
         for file in filenames:
             filename, ext = file.rsplit(".", 1)
-            if ext != "py": continue
-            if re.match(blacklisted_files, filename): continue
+            if ext != "py":
+                continue
+            if re.match(blacklisted_files, filename):
+                continue
 
             ext_path = dirpath.split(Paths.root, 1)[1].replace("\\", ".")
             yield f"{ext_path}.{filename}"
@@ -140,6 +152,13 @@ def custom_modules_from_globals(glb: dict) -> set:
             module_name := v.__module__
         )
     }
+
+
+def get_role_by_name(name: str, guild: disnake.Guild) -> Optional[disnake.Role]:
+    for role in guild.roles:
+        if role.name.lower() == name.lower():
+            return role
+    return None
 
 
 # JSON helpers
