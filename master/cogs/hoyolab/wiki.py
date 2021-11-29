@@ -84,8 +84,8 @@ class WikiCog(FullReloadCog):
         print("reloaded wiki cache")
 
     @commands.slash_command(name="wiki", guild_ids=[
-        701039771157397526, 511630315039490076, 555270199402823682]
-    )
+        701039771157397526, 511630315039490076, 555270199402823682, 268046379085987840
+    ])
     async def wiki(self, inter: Interaction, query: str):
         await inter.response.defer()
         page: QueryPage = self.bot.wiki_cache.get(query)
@@ -104,22 +104,16 @@ class WikiCog(FullReloadCog):
             ValidCategory.PSY, ValidCategory.BIO, ValidCategory.MECH,
             ValidCategory.QUA, ValidCategory.IMG
         }):
-            bsuit = BattlesuitModel(content=content)
-
-            await inter.edit_original_message(embeds=bsuit.to_embed())
-            return
+            wiki_result = BattlesuitModel(content=content)
 
         elif page.categories.intersection({
             ValidCategory.STIGMA1, ValidCategory.STIGMA2, ValidCategory.STIGMA3,
             ValidCategory.STIGMA4, ValidCategory.STIGMA5
         }):
-            stigs = StigmataSetModel(
+            wiki_result = StigmataSetModel(
                 stigs=dict.fromkeys(("T", "M", "B"), page.title),
                 content=content
             )
-
-            await inter.edit_original_message(embeds=stigs.to_embed())
-            return
 
         elif page.categories.intersection({
             ValidCategory.PISTOL, ValidCategory.KATANA, ValidCategory.CANNON,
@@ -127,16 +121,17 @@ class WikiCog(FullReloadCog):
             ValidCategory.SCYTHE, ValidCategory.LANCE, ValidCategory.BOW
         }):
             data = content.highest_rarity_by_name(page.title).data
-            wep = WeaponModel(**data)
+            wiki_result = WeaponModel(**data)
 
-            await inter.edit_original_message(embeds=wep.to_embed())
+        else:
+            await inter.edit_original_message(
+                content="It appears this type of query hasn't been implemented yet. "
+                        "Please check back soon:tm:. For now, have this "
+                        f"[link]({BASE_WIKI_URL}?curid={page.pageid})."
+            )
             return
 
-        await inter.edit_original_message(
-            content="It appears this type of query hasn't been implemented yet. "
-                    "Please check back soon:tm:. For now, have this "
-                    f"[link]({BASE_WIKI_URL}?curid={page.pageid})."
-        )
+        await inter.edit_original_message(embeds=wiki_result.to_embed())
 
     @wiki.autocomplete("query")
     async def wiki_query_autocomp(self, inter: Interaction, inp: str):

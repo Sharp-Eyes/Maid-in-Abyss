@@ -385,7 +385,7 @@ class ContentResponseModel(BaseModel):
     def highest_rarity_by_name(self, name: str) -> ContentPage:
 
         def predicate(page: ContentPage) -> int:
-            title = page.data.get("name")
+            title = page.title
             if not title:
                 return 0
             name_match = strip_suffix_from_title(title).lower() == name.lower()
@@ -662,6 +662,12 @@ class StigSlot(Enum):
     Bottom = "B"
 
 
+class SetBonusModel(GenericWikiModel):
+
+    name: str
+    effect: str
+
+
 class StigmataModel(GenericWikiModel):
 
     set: Wikilink = Field(alias="name")
@@ -673,6 +679,24 @@ class StigmataModel(GenericWikiModel):
     DEF: int = Field(slot_dependent=True)
     CRT: int = Field(slot_dependent=True)
 
+    set_2: Optional[SetBonusModel]
+    set_3: Optional[SetBonusModel]
+
+    @root_validator(pre=True, allow_reuse=True)
+    def compose_set_bonus(cls, values):
+        for i in (2, 3):
+            set_bonus_name = values.get(f"{i}set")
+            set_bonus_effect = values.get(f"{i}effect")
+            if not (set_bonus_name or set_bonus_effect):
+                break
+
+            values[f"set_{i}"] = SetBonusModel(
+                name=set_bonus_name,
+                effect=set_bonus_effect
+            )
+
+        return values
+
     @root_validator(pre=True, allow_reuse=True)
     def unpack_stats(cls, values):
         stig_slot: str = values["slot"].upper()
@@ -681,7 +705,11 @@ class StigmataModel(GenericWikiModel):
         for field in cls.__fields__.values():
             field_name = field.alias
             slot_dependent = field.field_info.extra.get("slot_dependent")
-            data[field_name] = values[stig_slot + field_name if slot_dependent else field_name]
+            try:
+                data[field_name] = values[stig_slot + field_name if slot_dependent else field_name]
+            except KeyError:
+                if field.required:
+                    raise
 
         return data
 
@@ -708,12 +736,6 @@ class StigmataModel(GenericWikiModel):
         ).set_thumbnail(
             url=image_link(f"{self.set.name}_({self.slot.value})_(Icon)")
         )
-
-
-class SetBonusModel(GenericWikiModel):
-
-    name: str
-    effect: str
 
 
 class StigmataSetModel(GenericWikiModel):
@@ -756,10 +778,10 @@ class StigmataSetModel(GenericWikiModel):
             if counts[stig.set.name] == 2:
                 values["rarity"] = stig.rarity
                 values["set"] = stig.set
-                values["2set"] = stig.set_2
+                values["set_2"] = stig.set_2
 
             elif counts[stig.set.name] == 3:
-                values["3set"] = stig.set_3
+                values["set_3"] = stig.set_3
 
         return values
 
@@ -788,7 +810,7 @@ class StigmataSetModel(GenericWikiModel):
 
     def to_embed(self) -> list[Embed]:
         defined = [stig for slot in ("T", "M", "B") if (stig := getattr(self, slot))]
-        show_rarity = len(defined) >= 2 and all_equal(defined)
+        show_rarity = len(defined) >= 2 and all_equal(stig.set for stig in defined)
 
         set_embed = self.get_set_bonus(show_rarity=show_rarity)
         embeds = [
