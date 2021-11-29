@@ -1,43 +1,11 @@
 from __future__ import annotations
 
-from disnake.ext import commands
-
-import aiohttp
-import sys
-import os
-import importlib.util
-import re
-import motor.motor_asyncio as motor
-
-from typing import Any
-from types import ModuleType
-from collections import defaultdict
-from inspect import iscoroutinefunction, isclass
-from dotenv import load_dotenv
+from typing import TYPE_CHECKING
+from inspect import isclass
 from pydantic import BaseModel, root_validator
 
-from utils.classes import defaultlist
-
-
-load_dotenv()
-user, pw, db_default = os.getenv("MONGO_USER"), os.getenv("MONGO_PASS"), os.getenv("MONGO_DB")
-DB_URI = (
-    f"mongodb+srv://{user}:{pw}@maid-in-abyss.kdpxk.mongodb.net/{db_default}"
-    "?retryWrites=true&w=majority"
-)
-
-
-class CustomBot(commands.Bot):
-
-    async def start(self, token: str, *, reconnect: bool = True) -> None:
-        self.session = aiohttp.ClientSession()
-        self.db = motor.AsyncIOMotorClient(DB_URI)
-        return await super().start(token, reconnect=reconnect)
-
-    async def close(self):
-        await self.session.close()
-        await self.db.close()
-        return await super().close()
+if TYPE_CHECKING:
+    from pydantic.typing import MappingIntStrAny, AbstractSetIntStr, DictStrAny
 
 
 class PropagatingModel(BaseModel):
@@ -80,178 +48,29 @@ class PropagatingModel(BaseModel):
 
         return values
 
-    def dict(self, **kwargs):
+    def dict(
+        self,
+        *,
+        include: AbstractSetIntStr | MappingIntStrAny = None,
+        exclude: AbstractSetIntStr | MappingIntStrAny = None,
+        by_alias: bool = False,
+        skip_defaults: bool = None,
+        exclude_unset: bool = False,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+    ) -> DictStrAny:
         hidden_fields = {
             attribute_name
             for attribute_name, model_field in self.__fields__.items()
             if model_field.field_info.extra.get("hidden") is True
         }
-        if kwargs.get("exclude"):
-            kwargs["exclude"].update(hidden_fields)
-        else:
-            kwargs["exclude"] = hidden_fields
+        if exclude is not None:
+            exclude.update(hidden_fields)
+        elif hidden_fields:
+            exclude = hidden_fields
 
-        return super().dict(**kwargs)
-
-
-class AsyncInitMixin(commands.Cog):
-    """A cog mixin that runs a coroutine method `init` along with the default `__init__`."""
-
-    async def __async_init__(self) -> None:
-        """Runs along with `__init__`."""
-
-    def __new__(cls, *args, **kwargs):
-        bot: commands.Bot = args[0]
-
-        self = super().__new__(cls, *args, **kwargs)
-
-        if not iscoroutinefunction(self.__async_init__):
-            bot.loop.run_in_executor(None, self.__async_init__)
-        else:
-            bot.loop.create_task(self.__async_init__())
-
-        return self
-
-
-class FullReloadCog(commands.Cog):
-    """A custom cog implementation that, when reloaded, ensures all the modules
-    loaded by the cog's source module are reloaded as well. For example, a module
-    `a.py` that imports `foo` and implements cog `Bar` will automatically reload
-    module `foo` when cog `Bar` is reloaded with the reload command defined in
-    `cogs.administrative.exts`.
-    """
-
-    def _prep_reload(self):
-
-        # Pattern that only matches 'custom', self-made module names. Mostly used because we don't
-        # need to reload modules like `re` or `disnake`, as they won't be modified during runtime.
-        pat = r"^cogs\..*$|^utils\..*$"
-
-        # Since the passed self is always the calling class instance, calling `_prep_reload` from
-        # a class that subclasses `Full_Reload_Cog` will make self that instance, not an instance
-        # of `Full_Reload_Cog`. We can use that to grab the globals of the module in which that
-        # class is defined. Note that <module>.__dict__ is equivalent to calling globals() in
-        # module <module>.
-        glb = sys.modules[self.__module__].__dict__
-
-        def make_new():
-            return defaultdict(set)
-        modules = defaultlist(make_new)
-        found_parents = set()
-
-        def reload(mod: str):
-            """Re-run the module and paste the result lib over the current one.
-            If this fails, the old lib is simply pasted back over the new one.
-            """
-            spec = importlib.util.find_spec(mod)
-            lib = importlib.util.module_from_spec(spec)
-            prev = sys.modules[mod]
-            sys.modules[mod] = lib
-            try:
-                spec.loader.exec_module(lib)
-            except Exception as e:
-                sys.modules[mod] = prev
-                raise e
-
-        def check_for_init_parent(module: ModuleType):
-            """Check if the module is a child of a module with an __init__.py file.
-            If so, add the parent module to the reload dict too. Otherwise, imports
-            from the parent module (folder name) would not actually reflect the
-            updated child modules.
-            """
-            path = os.path.dirname(module.__file__)
-            files = os.listdir(path)
-            if "__init__.py" in files:
-                return os.path.relpath(path, "master").replace("\\", ".")
-
-        # TODO: since there is no guarantee an init module is first encountered at minimum depth
-        #       there is a chance it will be reloaded before its dependencies are.
-        #       Confirm false or fix this.
-        def get_modules_rec(glb: dict[str, Any], depth: int = 0):
-            """Recursively get all modules imported by a module, then all modules imported by
-            those imported modules, and so forth. These fill out `modules` in order of the
-            recursion depth they were encountered at. Furthermore, for each module, the items
-            imported from that module are stored. This **will** contain duplicates.
-
-            This will create a sort of dependency 'tree', e.g.:
-            [
-                __main__ imports mod A, mod B, cls c from mod C;
-                A imports mod B, cls c from mod C // B imports mod C, mod D, cls e from mod E // C imports mod D
-                B imports mod C, mod D, cls e from mod E // C imports mod D
-                C imports mod D
-            ]
-            """  # NOQA
-            if depth > 50:
-                return   # Arbitrary, here to prevent spiral imports to recurse for too long.
-            for obj in glb.values():
-
-                if not hasattr(obj, "__module__"):
-                    if isinstance(obj, ModuleType) and re.match(pat, obj.__name__):
-                        # Directly encountered a custom module
-                        modules[depth][obj.__name__]
-
-                    # Encountered something that is not a module nor contains a reference
-                    # to a module, thus irrelevant.
-                    continue
-
-                # Encountered a non-module object that does contain a reference to a module
-                # e.g. `Paths` from `from utils.classes import Paths`.
-                obj_mod_name = obj.__module__
-                if obj_mod_name == glb["__name__"]: continue
-                if not re.match(pat, obj_mod_name): continue
-
-                modules[depth][obj_mod_name].add(obj)
-
-                # Get the currently loaded module from its name
-                obj_module = sys.modules[obj_mod_name]
-
-                # If a module's contents can be imported through an __init__.py file, that init
-                # file must be reloaded as well. Therefore, we have to check the directory of
-                # each module for __init__.py files.
-                parent = check_for_init_parent(obj_module)
-                if parent:
-                    # If we find one at depth 0, we shift everything we found to depth 1 and
-                    # prepend the parent at 0
-                    if depth == 0:
-                        depth += 1
-                        modules.insert(0, make_new())
-                        modules[0][parent]
-                        found_parents.add(parent)
-
-                    # Else we can just add it at depth-1. We make sure to only add the parent at
-                    # the lowest possible depth, as reloading the parent should be done after all
-                    # its children modules have been reloaded, and modules will be loaded from
-                    # greatest depth to lowest (explained later).
-                    elif parent not in found_parents:
-                        modules[depth - 1][parent]
-                        found_parents.add(parent)
-
-                get_modules_rec(obj_module.__dict__, depth=depth + 1)
-
-        # Construct 'dependency tree'
-        get_modules_rec(glb)
-
-        # Walk over tree from the back, ignoring any encountered duplicates (leaving the first one
-        # found in) This makes sure that all the dependencies are 'in shortest order' and without
-        # duplicates; if we then import the list this same order, we are guaranteed to import all
-        # modules' dependencies before we import the modules themselves. The previous example gets
-        # reduced to:
-        # [
-        #     __main__ imports mod A, mod B, cls c from mod C;
-        #     A imports mod B, cls c from mod C
-        #     B imports mod C, mod D, cls e from mod E
-        #     C imports mod D
-        # ]
-        to_ignore = set()
-        for mods in reversed(modules):
-            new = mods.keys() - to_ignore
-            for mod in new:
-                reload(mod)
-
-                # overwrite everything that was imported from the module to the newly reloaded
-                # module's instances
-                for o in mods[mod]:
-                    # pretty much does what "from <mod> import <o>" does
-                    glb[o.__name__] = getattr(sys.modules[mod], o.__name__)
-
-            to_ignore.update(new)
+        return super().dict(
+            include=include, exclude=exclude, by_alias=by_alias, skip_defaults=skip_defaults,
+            exclude_unset=exclude_unset, exclude_defaults=exclude_defaults,
+            exclude_none=exclude_none
+        )

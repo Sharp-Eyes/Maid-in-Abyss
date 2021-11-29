@@ -5,8 +5,7 @@ from disnake import ApplicationCommandInteraction as Interaction
 
 from typing import Type, TypeVar, Callable
 
-from utils.bot import FullReloadCog
-from utils.overrides import CustomBot
+from utils.bot import CustomBot
 from models.wiki import (
     ValidCategory, QueryResponse,
     ContentResponseModel, BattlesuitModel, StigmataSetModel, WeaponModel,
@@ -23,7 +22,7 @@ ResponseModel = TypeVar("ResponseModel")
 
 # Cog
 
-class WikiCog(FullReloadCog):
+class WikiCog(commands.Cog):
 
     def __init__(self, bot: CustomBot):
         self.bot = bot

@@ -27,7 +27,6 @@ __all__ = (
     "get_API_datetime",
     "get_API_date",
     "Hoyolab_API",
-    "GUILDS",
     "ValidGame",
 )
 
@@ -58,17 +57,6 @@ ACT_ID = {
 
 ValidRequestType = Union[aiohttp.ClientSession.get, aiohttp.ClientSession.post]
 ValidGame = Literal["Honkai Impact", "Genshin Impact"]
-
-
-# Predetermine guilds for local slash commands
-with open(Paths.guild_data) as guild_file:
-    guild_data: dict = json.load(guild_file)
-    GUILDS = [
-        int(guild_id)
-        for guild_id, data in guild_data.items()
-        if nested_get(data, "Genshin_Impact", "gapi_notification_channel")
-    ]
-    del guild_data
 
 
 def generate_ds_token(salt: str = DS_SALT) -> str:

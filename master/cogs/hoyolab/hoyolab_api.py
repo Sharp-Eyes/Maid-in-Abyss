@@ -17,8 +17,7 @@ from collections import defaultdict
 from typing import Optional
 from pydantic import ValidationError
 
-from utils.bot import FullReloadCog
-from utils.overrides import AsyncInitMixin, CustomBot
+from utils.bot import CustomBot
 from models.hoyolab import DiscordUserDataModel, HoyolabAccountModel, CookieModel
 
 from .__hoyolab_utils import Hoyolab_API, ValidGame
@@ -26,6 +25,7 @@ from .__hoyolab_utils.exceptions import AlreadySigned, FirstSign, HoyolabAPIErro
 
 import logging
 logger = logging.getLogger("Hoyolab_API")
+
 
 CHECKIN_FAIL_MSG = (
     "{}, something went awry in trying to claim your daily login rewards. "
@@ -96,15 +96,12 @@ class UserSigninResult:
 
 # cog
 
-class HoyolabApiCog(AsyncInitMixin, FullReloadCog):
+class HoyolabApiCog(commands.Cog):
 
     def __init__(self, bot: CustomBot):
         self.bot = bot
 
-        print("finished init")
-
-    async def __async_init__(self):
-        print("started async_init")
+    async def cog_load(self):
 
         await self.bot.wait_until_ready()
         self.API = Hoyolab_API(self.bot.session)
@@ -173,6 +170,7 @@ class HoyolabApiCog(AsyncInitMixin, FullReloadCog):
         user = disnake.utils.get(
             self.user_cache, discord_id=inter.author.id
         )
+        inter.send
         if not any([ltuid, ltoken, account_id, cookie_token]):
             # Assume we're just adding a game
             if user is None:
@@ -208,7 +206,7 @@ class HoyolabApiCog(AsyncInitMixin, FullReloadCog):
 
         if user is None:
             new_user = await DiscordUserDataModel.create_new(
-                discord_id=inter.author.id,
+                _id=inter.author.id,
                 hoyolab_data={"accounts": [{"name": name, "games": [game], "cookies": new_cookies}]}
             )
             self.user_cache.append(new_user)

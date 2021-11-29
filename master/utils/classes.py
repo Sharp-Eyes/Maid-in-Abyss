@@ -19,10 +19,10 @@ class Paths:
 # Custom classes
 
 
-_FT = TypeVar("_FT")
+T = TypeVar("T")
 
 
-class defaultlist(list[_FT]):
+class defaultlist(list[T]):
     """List that automatically appends a new entry when indexed out of range.
     This is done by calling :func:`default_factory`.
 
@@ -33,11 +33,11 @@ class defaultlist(list[_FT]):
         of this function will then populate that new list entry.
     """
 
-    def __init__(self, default_factory: Callable[[], _FT] | None):
+    def __init__(self, default_factory: Callable[[], T] | None):
         assert callable(default_factory)
         self.default_factory = default_factory
 
-    def __getitem__(self, i) -> _FT:
+    def __getitem__(self, i) -> T:
         try:
             return super().__getitem__(i)
         except IndexError:
@@ -46,57 +46,54 @@ class defaultlist(list[_FT]):
             return n
 
 
-class sortedlist:
+class sortedlist(list[T]):
 
-    def __init__(self, key=None, *args: _FT):
+    def __init__(self, key=None, *args):
         if args:
-            self.data = [i for i in args[0]] if isinstance(args[0], Iterable) else list(args)
+            super().__init__(args)
         else:
-            self.data: list[_FT] = []
+            super().__init__()
         self.key = key
 
     def __repr__(self) -> str:
         return "sortedlist(" + ", ".join(str(i) for i in self.data) + ")"
 
-    def __len__(self) -> int:
-        return len(self.data)
+    def __getitem__(self, i) -> T:
+        return super().__getitem__(i)
 
-    def __getitem__(self, i) -> _FT:
-        return self.data[i]
-
-    def _insert(self, i, item: _FT) -> sortedlist[_FT]:
-        self.data.insert(i, item)
+    def _insert(self, i, item: T) -> sortedlist[T]:
+        super().insert(i, item)
         return self
 
     def _cmp(self, L, M, U=None):
         if not self.key:
-            return L < M and (M <= U if U is not None else True)
+            return L < M and (True if U is None else M <= U)
         k = self.key
-        return k(L) < k(M) and (k(M) <= k(U) if U is not None else True)
+        return k(L) < k(M) and (True if U is None else k(M) <= k(U))
 
-    def insert(self, item: _FT) -> sortedlist[_FT]:
+    def insert(self, item: T) -> sortedlist[T]:
         # Binary search
         L = 0
         U = len(self) - 1
 
-        if not self.data:
-            self.data.append(item)
+        if not self:
+            self.append(item)
             return self
 
         if self._cmp(self.data[U], item):
-            self.data.append(item)
+            self.append(item)
             return self
         if self._cmp(item, self.data[L]):
             return self._insert(0, item)
 
         while True:
             M = (U + L) // 2
-            print(self.data, L, M, U)
+            print(self, L, M, U)
 
-            if self._cmp(self.data[M], item, self.data[M + 1]):
+            if self._cmp(self[M], item, self[M + 1]):
                 return self._insert(M + 1, item)
 
-            if self._cmp(self.data[M], item):
+            if self._cmp(self[M], item):
                 L = M + 1
             else:
                 U = M - 1
