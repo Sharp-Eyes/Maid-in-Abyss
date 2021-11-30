@@ -2,36 +2,32 @@
 
 import sys
 import traceback
-import json
+from dotenv import load_dotenv
+import os
 
 import disnake
 from disnake.ext import commands
-from disnake.ext.tasks import Loop
-# from discord_slash import SlashCommand
 
 from utils.helpers import search_all_extensions
-from utils.classes import Paths
-from utils.overrides import CustomBot
+from utils.bot import CustomBot
 
 import logging
 logging.basicConfig(level=logging.NOTSET)
 
 dpy_logger = logging.getLogger("disnake")
 dpy_logger.setLevel(logging.ERROR)
-
-# ds_logger = logging.getLogger("discord_slash")
-# ds_logger.setLevel(logging.WARN)
+reload_logger = logging.getLogger("reload")
+reload_logger.setLevel(logging.ERROR)  # Disable 'nested reload' debug notifs (utils/overrides.py)
 
 # Type aliases
 ExtensionError = commands.errors.ExtensionError
 
 
+load_dotenv()
+token = os.getenv("TOKEN")
+
+
 DEFAULT_PREFIX = ["."]
-
-
-with open(Paths.secret) as secret_file:
-    secret = json.load(secret_file)
-    token = secret["token"]
 
 intents = disnake.Intents.default()
 intents.members = True
@@ -48,11 +44,8 @@ def get_prefix(bot: CustomBot, msg: disnake.Message):
         return handle(*DEFAULT_PREFIX)(bot, msg)
 
     # Guild:
-    with open(Paths.guild_data) as data_file:
-        guild_data = json.load(data_file)
-
-    data = guild_data.get(str(guild.id), dict())
-    prefixes = data.get("prefix", DEFAULT_PREFIX)
+    # guild_data = bot["guilds"]
+    prefixes = DEFAULT_PREFIX  # guild_data.get(str(guild.id), "prefix", default=DEFAULT_PREFIX)
     return handle(*prefixes)(bot, msg)
 
 
@@ -62,25 +55,22 @@ if __name__ == "__main__":
         intents=intents,
     )
 
-    @bot.event
-    async def on_ready():
-        print(f"\n\nLogged in as {bot.user.name} | disnake version {disnake.__version__}")
+    # @bot.event
+    # async def on_ready():
+    # print(f"\n\nLogged in as {bot.user.name} | disnake version {disnake.__version__}")
 
-        # Load or reload extensions, whichever is appropriate
-        method = bot.load_extension if not bot.extensions else bot.reload_extension
-        exceptions = 0
-        for extension in search_all_extensions():
-            try:
-                method(extension)
-                print(f"> Successfully loaded extension {extension}!")
+    # Load or reload extensions, whichever is appropriate
+    exceptions = 0
+    for extension in search_all_extensions():
+        try:
+            bot.load_extension(extension)
+            print(f"> Successfully loaded extension {extension}!")
 
-            except (ExtensionError, Exception) as e:
-                exceptions += 1
-                print(f"> Failed to load extension {extension}: {e}.", file=sys.stderr)
-                traceback.print_exc()
+        except (ExtensionError, Exception) as e:
+            exceptions += 1
+            print(f"> Failed to load extension {extension}: {e}.", file=sys.stderr)
+            traceback.print_exc()
 
-        await bot._sync_application_commands()
-
-        print(f"\n> Encountered {exceptions} exceptions in loading cogs.\n")
+    print(f"\n> Encountered {exceptions} exceptions in loading cogs.\n")
 
     bot.run(token, reconnect=True)
