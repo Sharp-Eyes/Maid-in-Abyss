@@ -8,8 +8,8 @@ from pymongo.results import UpdateResult, InsertOneResult
 from utils.classes import Codeblock
 from utils.overrides import PropagatingModel
 from utils.bot import CustomBot
-from cogs.hoyolab.__hoyolab_utils import Hoyolab_API, ValidGame
-from cogs.hoyolab.__hoyolab_utils.exceptions import (
+from cogs.mihoyo.__hoyolab_utils import Hoyolab_API, ValidGame
+from cogs.mihoyo.__hoyolab_utils.exceptions import (
     AlreadySigned, FirstSign, HoyolabAPIError
 )
 
