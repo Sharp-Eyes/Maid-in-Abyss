@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from inspect import isclass
+from typing import TYPE_CHECKING
 from pydantic import BaseModel, root_validator
 
 if TYPE_CHECKING:
-    from pydantic.typing import MappingIntStrAny, AbstractSetIntStr, DictStrAny
+    from pydantic.typing import AbstractSetIntStr, DictStrAny, MappingIntStrAny
 
 
 class PropagatingModel(BaseModel):
@@ -70,7 +70,11 @@ class PropagatingModel(BaseModel):
             exclude = hidden_fields
 
         return super().dict(
-            include=include, exclude=exclude, by_alias=by_alias, skip_defaults=skip_defaults,
-            exclude_unset=exclude_unset, exclude_defaults=exclude_defaults,
-            exclude_none=exclude_none
+            include=include,
+            exclude=exclude,
+            by_alias=by_alias,
+            skip_defaults=skip_defaults,
+            exclude_unset=exclude_unset,
+            exclude_defaults=exclude_defaults,
+            exclude_none=exclude_none,
         )

@@ -1,17 +1,15 @@
-import datetime
-from typing import Any, Optional, Union
-
 import disnake
 from disnake.ext import commands
 
-from collections.abc import Mapping
-import re
-from os import walk
+import datetime
 import json
-from bs4 import BeautifulSoup, NavigableString
+import re
+from collections.abc import Mapping
 from functools import partial
 from itertools import groupby
-
+from os import walk
+from typing import Any, Optional, Union
+from bs4 import BeautifulSoup, NavigableString
 
 DEFAULT_EXT_DIR_BLACKLIST = r"__.*"
 DEFAULT_EXT_FILE_BLACKLIST = r"__.*"
@@ -42,12 +40,17 @@ def deep_update(D: dict, U: dict, *, update_None: bool = True, update_falsy: boo
     """
 
     if not update_falsy:
+
         def predicate(v):
             return bool(v)
+
     elif not update_None:
+
         def predicate(v):
             return v is not None
+
     else:
+
         def predicate(_):
             return True
 
@@ -90,7 +93,7 @@ def create_time_markdown(time: Union[int, datetime.datetime], format: str) -> st
         "long date": "D",
         "short time": "t",
         "long time": "T",
-        "relative time": "R"
+        "relative time": "R",
     }
     if format not in spec.values():
         format = spec.get(format.lower())
@@ -109,7 +112,7 @@ from .classes import Paths
 def search_all_extensions(
     *,
     blacklisted_dirs: str = DEFAULT_EXT_DIR_BLACKLIST,
-    blacklisted_files: str = DEFAULT_EXT_FILE_BLACKLIST
+    blacklisted_files: str = DEFAULT_EXT_FILE_BLACKLIST,
 ):
     """Search for all modules (.py files) in the cogs folder, with optional (regex) blacklists
     for folder and file names.
@@ -147,10 +150,7 @@ def custom_modules_from_globals(glb: dict) -> set:
     return {
         module_name
         for v in glb.values()
-        if hasattr(v, "__module__") and re.match(
-            pat,
-            module_name := v.__module__
-        )
+        if hasattr(v, "__module__") and re.match(pat, module_name := v.__module__)
     }
 
 
@@ -163,12 +163,9 @@ def get_role_by_name(name: str, guild: disnake.Guild) -> Optional[disnake.Role]:
 
 # JSON helpers
 
+
 def deep_update_json(
-    path: str,
-    U: dict,
-    *,
-    update_None: bool = True,
-    update_falsy: bool = True
+    path: str, U: dict, *, update_None: bool = True, update_falsy: bool = True
 ) -> dict:
     """Deep-updates a json file with a (nested) dict U. See :func:`deep_update` for
     further explanation of function parameters. Returns the data of the json file
@@ -189,12 +186,12 @@ def deep_update_json(
     """
 
     with open(path, "r+") as file:
-        data = json.load(file)     # Read file (advances pointer)
+        data = json.load(file)  # Read file (advances pointer)
         deep_update(data, U, update_None=update_None, update_falsy=update_falsy)
 
-        file.seek(0)                # Return pointer to beginning of file
-        json.dump(data, file)      # Start overwriting at pointer (beginning)
-        file.truncate()             # Cut off any remaining contents
+        file.seek(0)  # Return pointer to beginning of file
+        json.dump(data, file)  # Start overwriting at pointer (beginning)
+        file.truncate()  # Cut off any remaining contents
 
     return data
 
@@ -207,7 +204,7 @@ def parse_soup_text(
     strip: bool = True,
     split: bool = False,
     sep: str = " ",
-    ignore: list[str] = list()
+    ignore: list[str] = list(),
 ):
     result = [[]]
     get_text = partial(soup.get_text, strip=strip, separator=sep)
@@ -217,7 +214,7 @@ def parse_soup_text(
         t = get_text(a)
         if not t:
             return
-        h = href_prepend + a['href']
+        h = href_prepend + a["href"]
         result[-1].append(f"[{t}]({h})")
 
     def on_b(b: BeautifulSoup):
@@ -230,11 +227,7 @@ def parse_soup_text(
         if result:
             result.extend([["\n"], []])
 
-    state = {
-        "a": on_a,
-        "b": on_b,
-        "br": on_br
-    }
+    state = {"a": on_a, "b": on_b, "br": on_br}
 
     def recurse(soup: BeautifulSoup):
 

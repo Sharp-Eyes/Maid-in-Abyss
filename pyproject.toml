@@ -1,0 +1,10 @@
+[tool.black]
+line-length = 100
+
+[tool.isort]
+profile = "black"
+skip_gitignore=true
+known_disnake = "disnake"
+sections = ["FUTURE", "DISNAKE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+no_lines_before = ["THIRDPARTY", "LOCALFOLDER"]
+line_length = 100

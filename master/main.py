@@ -1,17 +1,16 @@
 # TODO: Move cog loading outside of on_ready, maybe disable cog reloading on dc, too.
 
-import sys
-import traceback
-from dotenv import load_dotenv
-import os
-
 import disnake
 from disnake.ext import commands
 
-from utils.helpers import search_all_extensions
-from utils.bot import CustomBot
-
 import logging
+import os
+import sys
+import traceback
+from dotenv import load_dotenv
+from utils.bot import CustomBot
+from utils.helpers import search_all_extensions
+
 logging.basicConfig(level=logging.NOTSET)
 
 dpy_logger = logging.getLogger("disnake")

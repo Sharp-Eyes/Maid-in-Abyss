@@ -1,24 +1,20 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, root_validator
-from typing import Optional, ClassVar
+import logging
 from collections import defaultdict
-from pymongo.results import UpdateResult, InsertOneResult
-
+from typing import ClassVar, Optional
+from cogs.mihoyo.__hoyolab_utils import Hoyolab_API, ValidGame
+from cogs.mihoyo.__hoyolab_utils.exceptions import AlreadySigned, FirstSign, HoyolabAPIError
+from pydantic import BaseModel, Field, root_validator
+from pymongo.results import InsertOneResult, UpdateResult
+from utils.bot import CustomBot
 from utils.classes import Codeblock
 from utils.overrides import PropagatingModel
-from utils.bot import CustomBot
-from cogs.mihoyo.__hoyolab_utils import Hoyolab_API, ValidGame
-from cogs.mihoyo.__hoyolab_utils.exceptions import (
-    AlreadySigned, FirstSign, HoyolabAPIError
-)
 
-import logging
 logger = logging.getLogger("Hoyolab_API")
 
 
 class CookieModel(BaseModel):
-
     class Config:
         extra = "forbid"
 
@@ -43,10 +39,9 @@ class CookieModel(BaseModel):
         return values
 
     def __str__(self):
-        return str(Codeblock(
-            "\n".join(f"{k:>12}: {v}" for k, v in self.dict().items()),
-            lang="yaml"
-        ))
+        return str(
+            Codeblock("\n".join(f"{k:>12}: {v}" for k, v in self.dict().items()), lang="yaml")
+        )
 
 
 class HoyolabAccountModel(BaseModel):
@@ -59,10 +54,7 @@ class HoyolabAccountModel(BaseModel):
     latest_claim: Optional[defaultdict[ValidGame, str]] = defaultdict(str)
     cookies: CookieModel
 
-    def update_games(
-        self,
-        game: ValidGame
-    ):
+    def update_games(self, game: ValidGame):
         """Add a new game to an existing Hoyolab account. With this, the same login cookies
         will be used for all games bound to the account.
         """
@@ -74,18 +66,14 @@ class HoyolabAccountModel(BaseModel):
 
         self.games.append(game)
 
-    def update_cookies(
-        self,
-        cookies: CookieModel
-    ):
+    def update_cookies(self, cookies: CookieModel):
         """Update the account's cookies. Actually mostly useless as accounts are validated,
         and two different accounts will most likely never have overlapping tokens.
         """
         self.cookies = cookies
 
     def match_cookies(
-        self,
-        other: HoyolabAccountModel | CookieModel
+        self, other: HoyolabAccountModel | CookieModel
     ) -> tuple[bool, bool, bool, bool]:
         """For two hoyolab accounts, check if the cookies match. Returns a tuple with
         four bools, denoting whether each set of cookies matches. This is guaranteed to
@@ -100,8 +88,7 @@ class HoyolabAccountModel(BaseModel):
         return tuple(
             own_cookie == other_cookie
             for own_cookie, other_cookie in zip(
-                self.cookies.dict().values(),
-                other_cookies.dict().values()
+                self.cookies.dict().values(), other_cookies.dict().values()
             )
         )
 
@@ -163,18 +150,13 @@ class HoyolabDataModel(PropagatingModel):
 
     accounts: list[HoyolabAccountModel]
 
-    def add_new_account(
-        self,
-        cookies: CookieModel,
-        game: ValidGame
-    ):
+    def add_new_account(self, cookies: CookieModel, game: ValidGame):
         """Add a new account with the provided cookies and bind it to the provided game."""
         new_account = HoyolabAccountModel(games=[game], cookies=cookies)
         self.accounts.append(new_account)
 
 
 class DiscordUserDataModel(PropagatingModel):
-
     class Config:
         arbitrary_types_allowed = True
 
@@ -187,13 +169,12 @@ class DiscordUserDataModel(PropagatingModel):
     async def commit(self):
         """Commit any changes made to the user by pushing to the database."""
         result: UpdateResult = await self.bot._motor.discord.users.update_one(
-            {"_id": self.discord_id},
-            {"$set": self.dict(by_alias=True)}
+            {"_id": self.discord_id}, {"$set": self.dict(by_alias=True)}
         )
         logger.log(
             1,
             f"Updated DB <db.discord.users>; {result.modified_count} entries modified "
-            f"with id {self.discord_id}."
+            f"with id {self.discord_id}.",
         )
 
     @classmethod

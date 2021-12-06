@@ -4,28 +4,24 @@ import disnake
 from disnake.ext import commands
 from disnake.ext.commands import ExtensionNotLoaded
 from disnake.ext.commands.common_bot_base import _is_submodule
-from disnake.types.embed import Embed as EmbedDict
 
+import importlib.util
+import logging
+import os
+import sys
+from dataclasses import dataclass, field
+from types import ModuleType
+from typing import Any, Callable, Mapping, Optional, Union
 import aiohttp
+from dotenv import load_dotenv
 from motor import motor_asyncio as motor
 from odmantic import AIOEngine
-import sys
-import os
-import importlib.util
-from dotenv import load_dotenv
-from types import ModuleType
-from typing import Any, Callable, Optional, Mapping, Union
-from dataclasses import dataclass, field
 
-import logging
 reload_logger = logging.getLogger("reload")
 reload_logger.setLevel(logging.DEBUG)
 
 
-__all__ = (
-    "CustomBot"
-    "FullReloadCog"
-)
+__all__ = "CustomBot" "FullReloadCog"
 
 disnake.embeds.Embed
 
@@ -40,6 +36,7 @@ START = object()
 
 
 # Custom bot
+
 
 def is_custom_module(module: ModuleType) -> bool:
     """Check whether the passed module is a 'custom module'. This is done by checking
@@ -96,7 +93,7 @@ def update_module_storage(
     depth: int,
     module_name: str,
     module: Optional[ModuleType] = None,
-    imported_item: Optional[str] = None
+    imported_item: Optional[str] = None,
 ):
     """Adds a module to storage or updates a module already in storage.
 
@@ -169,20 +166,15 @@ def recursive_magic_fuckery(
 
 
 class CustomBot(commands.Bot):
-
     def __init__(
         self,
         command_prefix: Optional[Union[str, list[str], Callable]] = None,
         description: str = None,
-        **options: Any
+        **options: Any,
     ):
         self._motor = motor.AsyncIOMotorClient(DB_URI)
         self.db = AIOEngine(self._motor, "discord")
-        super().__init__(
-            command_prefix=command_prefix,
-            description=description,
-            **options
-        )
+        super().__init__(command_prefix=command_prefix, description=description, **options)
 
     async def start(self, token: str, *, reconnect: bool = True) -> None:
         self.session = aiohttp.ClientSession()
@@ -196,22 +188,19 @@ class CustomBot(commands.Bot):
         await self.db.close()
         return await super().close()
 
-    def _reload_submodules(
-        self,
-        lib: ModuleType
-    ) -> None:
+    def _reload_submodules(self, lib: ModuleType) -> None:
         """Atomically reloads all 'custom' submodules of a given module."""
 
         lib_globals = lib.__dict__
-        module_storage = dict(sorted(
-            recursive_magic_fuckery(lib_globals).items(),
-            key=lambda pair: -pair[1].priority
-        ))
+        module_storage = dict(
+            sorted(recursive_magic_fuckery(lib_globals).items(), key=lambda pair: -pair[1].priority)
+        )
 
         old: dict[str, ModuleType] = {}
         for module_name, module_data in module_storage.items():
-            reload_logger.debug(f"Reloading items {module_data.module_imports} "
-                                f"from module {module_name}")
+            reload_logger.debug(
+                f"Reloading items {module_data.module_imports} " f"from module {module_name}"
+            )
 
             spec = importlib.util.find_spec(module_name)
             lib = importlib.util.module_from_spec(spec)
@@ -234,11 +223,7 @@ class CustomBot(commands.Bot):
                 lib_globals[obj_name] = getattr(sys.modules[module_name], obj_name)
 
     def reload_extension(
-        self,
-        name: str,
-        *,
-        package: Optional[str] = None,
-        reload_submodules: bool = False
+        self, name: str, *, package: Optional[str] = None, reload_submodules: bool = False
     ) -> None:
         """Atomically reloads an extension.
 

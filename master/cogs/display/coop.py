@@ -1,10 +1,10 @@
-from typing import Optional
 import disnake
+from disnake import ApplicationCommandInteraction as Interaction
+from disnake import ButtonStyle, MessageInteraction, SelectOption
 from disnake.ext import commands
-from disnake import MessageInteraction, ApplicationCommandInteraction as Interaction
-from disnake.ui import View, Select, Button, button
-from disnake import SelectOption, ButtonStyle
+from disnake.ui import Button, Select, View
 
+from typing import Optional
 from models.guilds import ViewModel
 from utils.bot import CustomBot
 
@@ -21,10 +21,7 @@ class CoopSelect(Select):
                 if len(self.roles) == len(self.role_names):
                     break
 
-        options = [
-            SelectOption(label=role_name)
-            for role_name in self.role_names
-        ]
+        options = [SelectOption(label=role_name) for role_name in self.role_names]
 
         super().__init__(
             placeholder=f"{self.game} coop roles...",
@@ -32,16 +29,12 @@ class CoopSelect(Select):
             max_values=len(options),
             options=options,
             row=row,
-            custom_id=custom_id
+            custom_id=custom_id,
         )
 
     async def callback(self, inter: MessageInteraction):
         await inter.response.defer()
-        selected_roles = {
-            role
-            for role in self.roles
-            if role.name in self.values
-        }
+        selected_roles = {role for role in self.roles if role.name in self.values}
 
         author: disnake.Member = inter.author
         author_roles = set(author.roles)
@@ -55,7 +48,7 @@ class CoopSelect(Select):
             "Captain, you now have the following roles:\n"
             + ", ".join(role.mention for role in sorted(selected_roles))
             + self.changelog(add_roles, remove_roles),
-            ephemeral=True
+            ephemeral=True,
         )
 
     @classmethod
@@ -74,11 +67,7 @@ class CoopSelect(Select):
 
 
 class HonkaiSelect(CoopSelect):
-    role_names = (
-        "Captain Level 1-60",
-        "Captain Level 61-80",
-        "Captain Level 81-88"
-    )
+    role_names = ("Captain Level 1-60", "Captain Level 61-80", "Captain Level 81-88")
     game = "Honkai Impact"
 
 
@@ -88,34 +77,16 @@ class GenshinSelect(CoopSelect):
 
 
 class CoopRemoveButton(Button):
+    def __init__(self, label: str, custom_id: str, row: Optional[int] = None):
+        super().__init__(label=label, style=ButtonStyle.red, row=row, custom_id=custom_id)
 
-    def __init__(
-        self,
-        label: str,
-        custom_id: str,
-        row: Optional[int] = None
-    ):
-        super().__init__(
-            label=label,
-            style=ButtonStyle.red,
-            row=row,
-            custom_id=custom_id
-        )
-
-    async def remove_roles(
-        self, member: disnake.Member, role_names: list[str]
-    ) -> str:
-        to_remove = {
-            role
-            for role in member.roles
-            if role.name in role_names
-        }
+    async def remove_roles(self, member: disnake.Member, role_names: list[str]) -> str:
+        to_remove = {role for role in member.roles if role.name in role_names}
         await member.remove_roles(*to_remove)
         return CoopSelect.changelog(removed=to_remove)
 
 
 class HonkaiRemoveButton(CoopRemoveButton):
-
     def __init__(self, row: Optional[int] = None):
         super().__init__("Remove all | Honkai", "HonkaiX", row=row)
 
@@ -123,13 +94,11 @@ class HonkaiRemoveButton(CoopRemoveButton):
         await inter.response.defer()
         changelog = await self.remove_roles(inter.author, HonkaiSelect.role_names)
         await inter.send(
-            f"Successfully removed all Honkai Impact coop roles:\n{changelog}",
-            ephemeral=True
+            f"Successfully removed all Honkai Impact coop roles:\n{changelog}", ephemeral=True
         )
 
 
 class GenshinRemoveButton(CoopRemoveButton):
-
     def __init__(self, row: Optional[int] = None):
         super().__init__("Remove all | Genshin", "GenshinX", row=row)
 
@@ -137,8 +106,7 @@ class GenshinRemoveButton(CoopRemoveButton):
         await inter.response.defer()
         changelog = await self.remove_roles(inter.author, GenshinSelect.role_names)
         await inter.send(
-            f"Successfully removed all Genshin Impact coop roles:\n{changelog}",
-            ephemeral=True
+            f"Successfully removed all Genshin Impact coop roles:\n{changelog}", ephemeral=True
         )
 
 
@@ -159,7 +127,6 @@ class CoopView(View):
 
 
 class CoopCog(commands.Cog):
-
     def __init__(self, bot: CustomBot):
         self.bot = bot
 
@@ -170,10 +137,7 @@ class CoopCog(commands.Cog):
     async def cog_load(self):
         async for view_data in self.bot.db.find(ViewModel, ViewModel.type == "coop"):
             guild = await self.bot.getch_guild(view_data.guild_id)
-            self.bot.add_view(
-                CoopView(guild, view_data.data["games"]),
-                message_id=view_data.id
-            )
+            self.bot.add_view(CoopView(guild, view_data.data["games"]), message_id=view_data.id)
 
             print(f"registered coop view with id {view_data.id}")
 
@@ -181,11 +145,7 @@ class CoopCog(commands.Cog):
     async def epiccheck(self, ctx: commands.Context):
         await ctx.send(self.bot.persistent_views)
 
-    async def setup_coop_roles(
-        self,
-        guild: disnake.Guild,
-        roles: set[str]
-    ) -> None:
+    async def setup_coop_roles(self, guild: disnake.Guild, roles: set[str]) -> None:
         """Adds a list of coop roles by name, disregarding any roles that already exist."""
         existing_role_names = {role.name for role in guild.roles}
         for role_name in roles - existing_role_names:
@@ -198,23 +158,13 @@ class CoopCog(commands.Cog):
             if role.name in to_delete:
                 await role.delete()
 
-    async def setup_coop(
-        self,
-        channel: disnake.TextChannel,
-        games: list[str]
-    ) -> None:
+    async def setup_coop(self, channel: disnake.TextChannel, games: list[str]) -> None:
         """Set up coop roles and a selector in the given channel."""
         if "Honkai Impact" in games:
-            await self.setup_coop_roles(
-                channel.guild,
-                set(HonkaiSelect.role_names)
-            )
+            await self.setup_coop_roles(channel.guild, set(HonkaiSelect.role_names))
 
         if "Genshin Impact" in games:
-            await self.setup_coop_roles(
-                channel.guild,
-                set(GenshinSelect.role_names)
-            )
+            await self.setup_coop_roles(channel.guild, set(GenshinSelect.role_names))
 
         embed = disnake.Embed(
             title="Coop role selector",
@@ -225,22 +175,18 @@ class CoopCog(commands.Cog):
                 "If you wish to completely remove all roles, please click the "
                 "corresponding button(s) underneath the selector(s)."
             ),
-            color=channel.guild.me.top_role.color
+            color=channel.guild.me.top_role.color,
         )
-        message = await channel.send(
-            embed=embed, view=CoopView(channel.guild, games)
-        )
+        message = await channel.send(embed=embed, view=CoopView(channel.guild, games))
         view_data = ViewModel(
             id=message.id,
             type="coop",
             channel_id=channel.id,
             guild_id=channel.guild.id,
-            data={"games": games}
+            data={"games": games},
         )
         existing = await self.bot.db.find_one(
-            ViewModel,
-            ViewModel.guild_id == channel.guild.id,
-            ViewModel.type == "coop"
+            ViewModel, ViewModel.guild_id == channel.guild.id, ViewModel.type == "coop"
         )
         if existing:
             await self.bot.db.delete(existing)
@@ -253,9 +199,7 @@ class CoopCog(commands.Cog):
     async def teardown_coop(self, guild: disnake.Guild) -> None:
         """Remove coop roles and the coop selector from the specified guild."""
         view_data = await self.bot.db.find_one(
-            ViewModel,
-            ViewModel.guild_id == guild.id,
-            ViewModel.type == "coop"
+            ViewModel, ViewModel.guild_id == guild.id, ViewModel.type == "coop"
         )
         channel = self.bot.get_channel(view_data.channel_id)
         try:
@@ -267,10 +211,7 @@ class CoopCog(commands.Cog):
 
     @commands.Cog.listener("on_coop_setup")
     async def setup_coop_remote(
-        self,
-        channel: disnake.TextChannel,
-        games: list[str],
-        progress_message: disnake.Message
+        self, channel: disnake.TextChannel, games: list[str], progress_message: disnake.Message
     ):
         await self.setup_coop(channel, games)
 
@@ -283,11 +224,7 @@ class CoopCog(commands.Cog):
         await progress_message.edit(embed=embed)
 
     @commands.Cog.listener("on_coop_teardown")
-    async def teardown_coop_remote(
-        self,
-        guild: disnake.Guild,
-        progress_message: disnake.Message
-    ):
+    async def teardown_coop_remote(self, guild: disnake.Guild, progress_message: disnake.Message):
         await self.teardown_coop(guild)
 
         embed = progress_message.embeds[0]

@@ -2,18 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-
-from typing import TypeVar, Callable, Iterable, Any
-
-
-@dataclass
-class Paths:
-    root = ".\\master\\"
-    secret = root + "private.json"
-    guild_data = root + "guild_data.json"
-    user_data = root + "user_data.json"
-    cogs = root + 'cogs\\'
-    events = root + 'events.json'
+from typing import Callable, TypeVar
 
 
 # Custom classes
@@ -47,7 +36,6 @@ class defaultlist(list[T]):
 
 
 class sortedlist(list[T]):
-
     def __init__(self, key=None, *args):
         if args:
             super().__init__(args)
@@ -103,7 +91,6 @@ class sortedlist(list[T]):
 
 
 class Codeblock:
-
     def __init__(self, content: str, *, lang: str = None):
         if lang is not None:
             self.content = content

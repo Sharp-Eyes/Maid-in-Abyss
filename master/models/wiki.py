@@ -3,18 +3,15 @@ from __future__ import annotations
 from disnake.embeds import Embed
 from disnake.utils import escape_markdown
 
-import regex
 import urllib
 from collections import defaultdict
+from enum import Enum, EnumMeta
 from functools import reduce
 from operator import itemgetter
-from enum import Enum, EnumMeta
-from pydantic import (
-    BaseModel, Field, validator, root_validator, PrivateAttr, ValidationError
-)
-from typing import Any, Optional, Callable
+from typing import Any, Callable, Optional
+import regex
 import wikitextparser as wtp
-
+from pydantic import BaseModel, Field, PrivateAttr, ValidationError, root_validator, validator
 from utils.helpers import all_equal
 
 try:
@@ -38,11 +35,7 @@ class EmojiMeta(EnumMeta):  # TODO: Move
 
     def __init__(self, name, bases, namespace) -> None:
         super().__init__(name, bases, namespace)
-        self.__sortkeys__ = sorted(
-            (e.name.replace("_", " ") for e in self),
-            key=len,
-            reverse=True
-        )
+        self.__sortkeys__ = sorted((e.name.replace("_", " ") for e in self), key=len, reverse=True)
 
 
 class Emoji(Enum, metaclass=EmojiMeta):  # TODO: Move
@@ -98,48 +91,49 @@ class Emoji(Enum, metaclass=EmojiMeta):  # TODO: Move
 
 
 class Colours(Enum):
-    BIO = 0xffb833
-    PSY = 0xfe46cf
-    MECH = 0x2fe0ff
-    QUA = 0x9b78fe
-    IMG = 0xf1d799
+    BIO = 0xFFB833
+    PSY = 0xFE46CF
+    MECH = 0x2FE0FF
+    QUA = 0x9B78FE
+    IMG = 0xF1D799
 
-    T = 0xff9279
-    M = 0x9daafe
-    B = 0xb2c964
+    T = 0xFF9279
+    M = 0x9DAAFE
+    B = 0xB2C964
 
 
 class ValidCategory(Enum):
-    STIGMA1 = 'Category:1-star Stigmata'
-    STIGMA2 = 'Category:2-star Stigmata'
-    STIGMA3 = 'Category:3-star Stigmata'
-    STIGMA4 = 'Category:4-star Stigmata'
-    STIGMA5 = 'Category:5-star Stigmata'
+    STIGMA1 = "Category:1-star Stigmata"
+    STIGMA2 = "Category:2-star Stigmata"
+    STIGMA3 = "Category:3-star Stigmata"
+    STIGMA4 = "Category:4-star Stigmata"
+    STIGMA5 = "Category:5-star Stigmata"
 
-    MECH = 'Category:MECH-type Battlesuits'
-    PSY = 'Category:PSY-type Battlesuits'
-    BIO = 'Category:BIO-type Battlesuits'
-    IMG = 'Category:IMG-type Battlesuits'
-    QUA = 'Category:QUA-type Battlesuits'
+    MECH = "Category:MECH-type Battlesuits"
+    PSY = "Category:PSY-type Battlesuits"
+    BIO = "Category:BIO-type Battlesuits"
+    IMG = "Category:IMG-type Battlesuits"
+    QUA = "Category:QUA-type Battlesuits"
 
-    WEAPON1 = 'Category:1-Star Weapons'
-    WEAPON2 = 'Category:2-Star Weapons'
-    WEAPON3 = 'Category:3-Star Weapons'
-    WEAPON4 = 'Category:4-Star Weapons'
-    WEAPON5 = 'Category:5-Star Weapons'
+    WEAPON1 = "Category:1-Star Weapons"
+    WEAPON2 = "Category:2-Star Weapons"
+    WEAPON3 = "Category:3-Star Weapons"
+    WEAPON4 = "Category:4-Star Weapons"
+    WEAPON5 = "Category:5-Star Weapons"
 
-    LANCE = 'Category:Lances'
-    PISTOL = 'Category:Pistols'
-    GAUNTLET = 'Category:Gauntlets'
-    KATANA = 'Category:Katanas'
-    CROSS = 'Category:Crosses'
-    BOW = 'Category:Bows'
-    CANNON = 'Category:Cannons'
-    SCYTHE = 'Category:Scythes'
-    GREATSWORD = 'Category:Greatswords'
+    LANCE = "Category:Lances"
+    PISTOL = "Category:Pistols"
+    GAUNTLET = "Category:Gauntlets"
+    KATANA = "Category:Katanas"
+    CROSS = "Category:Crosses"
+    BOW = "Category:Bows"
+    CANNON = "Category:Cannons"
+    SCYTHE = "Category:Scythes"
+    GREATSWORD = "Category:Greatswords"
 
 
 # API response handlers
+
 
 def strip_suffix_from_title(title: str) -> str:
     return regex.match(r"(.+?)(?=$| ?[\(/].*)", title)[0]
@@ -178,11 +172,7 @@ class QueryPage(BaseModel):
     @validator("aliases", pre=True, allow_reuse=True)
     def extract_redirect(cls, redirects: dict[str], values):
         title = values["title"]
-        return [
-            redirect["title"]
-            for redirect in redirects
-            if redirect["title"] not in title
-        ]
+        return [redirect["title"] for redirect in redirects if redirect["title"] not in title]
 
     @property
     def pageid(self) -> str:
@@ -254,8 +244,7 @@ class QueryResponse(BaseModel):
 
         return {
             match_descriptor: page_name
-            for _, page_name, match_descriptor in
-            sorted(matches)[:-n:-1]
+            for _, page_name, match_descriptor in sorted(matches)[:-n:-1]
         }
 
 
@@ -279,6 +268,7 @@ class WikiText(wtp._wikitext.WikiText):
 
 class Wikilink:
     """Class that represents a simple hyperlink to the wiki."""
+
     emoji: Emoji
 
     def __init__(self, name):
@@ -354,10 +344,7 @@ class ContentResponseModel(BaseModel):
 
     @root_validator(pre=True, allow_reuse=True)
     def unpack_pages(cls, values: dict[str, dict[str]]):
-        return {"pages": [
-            ContentPage(**page)
-            for page in values["query"]["pages"].values()
-        ]}
+        return {"pages": [ContentPage(**page) for page in values["query"]["pages"].values()]}
 
     def update(self, other: ContentResponseModel) -> None:
         self.pages.append(other.pages)
@@ -383,7 +370,6 @@ class ContentResponseModel(BaseModel):
         return [page for page in self.pages if predicate(page)]
 
     def highest_rarity_by_name(self, name: str) -> ContentPage:
-
         def predicate(page: ContentPage) -> int:
             title = page.title
             if not title:
@@ -399,6 +385,7 @@ class ContentResponseModel(BaseModel):
 
 
 # Generic
+
 
 def urlify(s: str):
     """Convert a string value to a value more likely to be recognized by
@@ -417,11 +404,7 @@ def wiki_link(name: str):
 
 
 def resolve_wikilinks(field: str):
-    return regex.sub(
-        r"(\[\[(.*?)\]\])",
-        lambda m: wiki_link(m[2]),
-        field
-    )
+    return regex.sub(r"(\[\[(.*?)\]\])", lambda m: wiki_link(m[2]), field)
 
 
 def convert_tag(match) -> str:
@@ -432,7 +415,7 @@ def convert_tag(match) -> str:
         "br": "\n",
         "increase": "**{0}**",
         "color-blue": "**{0}**",
-        "color-orange": "**{0}**\n"
+        "color-orange": "**{0}**\n",
     }[result["t"]]
 
     m = result["m"]
@@ -443,13 +426,13 @@ def convert_tag(match) -> str:
 
 def eliminate_tags(field: str):
     return regex.sub(
-        r"(?P<t>\\?'\\?'\\?')(?P<m>.*?)\\?'\\?'\\?'"                # '''|x|''' -> **|x|**
-        r"|<(?P<t>br).*?>(?P<m>\n? ?)"                              # <br> or <br>\n -> \n
+        r"(?P<t>\\?'\\?'\\?')(?P<m>.*?)\\?'\\?'\\?'"  # '''|x|''' -> **|x|**
+        r"|<(?P<t>br).*?>(?P<m>\n? ?)"  # <br> or <br>\n -> \n
         r"|<span class=\"(?P<t>[\w-]+)\">\s?(?P<m>.*?)\s?</span>",  # <span class=|x|>|y|</span>
         convert_tag,
         field,
         0,
-        regex.S
+        regex.S,
     )
 
 
@@ -488,7 +471,6 @@ class ExtraPropagator(BaseModel):
 
 
 class GenericWikiModel(ExtraPropagator):
-
     @root_validator(pre=True, allow_reuse=True)
     def parse_arguments(cls, values: dict[str, str]):
         for k, v in values.copy().items():
@@ -509,7 +491,7 @@ class GenericWikiModel(ExtraPropagator):
         return values
 
     @root_validator(allow_reuse=True)
-    def post_string_parse(cls, values: dict[str: Any]):
+    def post_string_parse(cls, values: dict[str:Any]):
         for k, v in values.items():
             field = cls.__fields__.get(k)
             if field.field_info.extra.get("parse_post") is True:
@@ -519,17 +501,14 @@ class GenericWikiModel(ExtraPropagator):
 
     @staticmethod
     def _fix_string(s: str) -> str:
-        return reduce(
-            lambda x, f: f(x),
-            (escape_markdown, resolve_wikilinks, eliminate_tags),
-            s
-        )
+        return reduce(lambda x, f: f(x), (escape_markdown, resolve_wikilinks, eliminate_tags), s)
 
     def to_embed(self) -> list[Embed]:
         ...
 
 
 # Battlesuits
+
 
 class Recommendation(ExtraPropagator):
 
@@ -543,10 +522,7 @@ class Recommendation(ExtraPropagator):
         return {
             "inline": True,
             "name": f"{self.stage} Equipment:",
-            "value": (
-                f"{self.weapon}\n"
-                f"{self.top}\n{self.mid}\n{self.bot}"
-            )
+            "value": (f"{self.weapon}\n" f"{self.top}\n{self.mid}\n{self.bot}"),
         }
 
 
@@ -595,65 +571,61 @@ class BattlesuitModel(GenericWikiModel):
         for stage in ("beginner", "economic", "advanced"):
             keys = (f"{stage}Weapon", f"{stage}Top", f"{stage}Middle", f"{stage}Bottom")
             w, t, m, b = itemgetter(*keys)(values)
-            values.setdefault("recommendations", list()).append(Recommendation(
-                weapon=w,
-                top=t, mid=m, bot=b,
-                stage=stage.title()
-            ))
+            values.setdefault("recommendations", list()).append(
+                Recommendation(weapon=w, top=t, mid=m, bot=b, stage=stage.title())
+            )
 
     @classmethod
     def parse_formations(cls, values) -> None:
         for i in (1, 2):
             keys = (f"formation{i}", f"reason{i}")
             f, r = itemgetter(*keys)(values)
-            values.setdefault("formations", list()).append(Formation(
-                valk=f, reason=eliminate_tags(r)
-            ))
+            values.setdefault("formations", list()).append(
+                Formation(valk=f, reason=eliminate_tags(r))
+            )
 
     @validator("core_strengths", pre=True, allow_reuse=True)
     def parse_core_strengths(cls, value):
-        cores = regex.findall(
-            "|".join(Emoji.__sortkeys__), value, regex.I)
+        cores = regex.findall("|".join(Emoji.__sortkeys__), value, regex.I)
         return [Emoji[core] for core in cores]
 
     def to_embed(self) -> list[Embed]:
-        header_embed = Embed(
-            description=self.profile + " " + "\u2800" * 42,
-            color=Colours[self.type.name].value
-        ).set_thumbnail(
-            url=image_link(f"{(self.battlesuit or self.augment).name}_(Avatar)")
-        ).set_author(
-            name=f"{(self.battlesuit or self.augment).name} (link)",
-            url=(self.battlesuit or self.augment).link,
-            icon_url=image_link(f"Valkyrie_{self.rank.name}")
+        header_embed = (
+            Embed(
+                description=self.profile + " " + "\u2800" * 42, color=Colours[self.type.name].value
+            )
+            .set_thumbnail(url=image_link(f"{(self.battlesuit or self.augment).name}_(Avatar)"))
+            .set_author(
+                name=f"{(self.battlesuit or self.augment).name} (link)",
+                url=(self.battlesuit or self.augment).link,
+                icon_url=image_link(f"Valkyrie_{self.rank.name}"),
+            )
         )
 
-        info_embed = Embed(
-            color=Colours[self.type.name].value
-        ).add_field(
-            name="About:",
-            value=(' '.join(str(p) for p in self.core_strengths)
-                   + f"\n{self.character}\nType: {self.type}\nAugment: {self.augment}"),
-            inline=True
-        ).add_field(
-            name="Obtain:",
-            value=f"{self.obtain}",
-            inline=True
-        ).add_field(
-            name="Formations:",
-            value="\n".join(f.format() for f in self.formations),
-            inline=False
+        info_embed = (
+            Embed(color=Colours[self.type.name].value)
+            .add_field(
+                name="About:",
+                value=(
+                    " ".join(str(p) for p in self.core_strengths)
+                    + f"\n{self.character}\nType: {self.type}\nAugment: {self.augment}"
+                ),
+                inline=True,
+            )
+            .add_field(name="Obtain:", value=f"{self.obtain}", inline=True)
+            .add_field(
+                name="Formations:",
+                value="\n".join(f.format() for f in self.formations),
+                inline=False,
+            )
         )
-        reduce(
-            lambda e, f: Embed.add_field(e, **f.format()),
-            self.recommendations,
-            info_embed
-        )
+        reduce(lambda e, f: Embed.add_field(e, **f.format()), self.recommendations, info_embed)
 
         return [header_embed, info_embed]
 
 
 # Stigmata
+
 
 class StigSlot(Enum):
 
@@ -690,10 +662,7 @@ class StigmataModel(GenericWikiModel):
             if not (set_bonus_name or set_bonus_effect):
                 break
 
-            values[f"set_{i}"] = SetBonusModel(
-                name=set_bonus_name,
-                effect=set_bonus_effect
-            )
+            values[f"set_{i}"] = SetBonusModel(name=set_bonus_name, effect=set_bonus_effect)
 
         return values
 
@@ -721,20 +690,19 @@ class StigmataModel(GenericWikiModel):
                 ("HP", self.HP),
                 ("ATK", self.ATK),
                 ("DEF", self.DEF),
-                ("CRT", self.CRT)
+                ("CRT", self.CRT),
             )
             if stat
         )
 
-        return Embed(
-            description=f"{desc}\n\n{stats}",
-            colour=Colours[self.slot.value].value
-        ).set_author(
-            name=f"{self.set.name} ({self.slot.value})",
-            url=self.set.link,
-            icon_url=image_link(f"Stigmata_{self.slot.name}")
-        ).set_thumbnail(
-            url=image_link(f"{self.set.name}_({self.slot.value})_(Icon)")
+        return (
+            Embed(description=f"{desc}\n\n{stats}", colour=Colours[self.slot.value].value)
+            .set_author(
+                name=f"{self.set.name} ({self.slot.value})",
+                url=self.set.link,
+                icon_url=image_link(f"Stigmata_{self.slot.name}"),
+            )
+            .set_thumbnail(url=image_link(f"{self.set.name}_({self.slot.value})_(Icon)"))
         )
 
 
@@ -789,22 +757,22 @@ class StigmataSetModel(GenericWikiModel):
         if not self.set:
             return None
 
-        set_embed = Embed(
-            description=f"Rarity: {self.rarity * Emoji.STAR.value}" if show_rarity else Embed.Empty
-        ).set_author(
-            name=f"{self.set.name} set:",
-            url=self.set.link,
-            icon_url=image_link("Item Type (Stigmata)")
-        ).add_field(
-            name=f"{self.set_2.name} (2-set):",
-            value=self.set_2.effect
+        set_embed = (
+            Embed(
+                description=f"Rarity: {self.rarity * Emoji.STAR.value}"
+                if show_rarity
+                else Embed.Empty
+            )
+            .set_author(
+                name=f"{self.set.name} set:",
+                url=self.set.link,
+                icon_url=image_link("Item Type (Stigmata)"),
+            )
+            .add_field(name=f"{self.set_2.name} (2-set):", value=self.set_2.effect)
         )
 
         if self.set_3:
-            set_embed.add_field(
-                name=f"{self.set_3.name} (3-set):",
-                value=self.set_3.effect
-            )
+            set_embed.add_field(name=f"{self.set_3.name} (3-set):", value=self.set_3.effect)
 
         return set_embed
 
@@ -814,9 +782,7 @@ class StigmataSetModel(GenericWikiModel):
 
         set_embed = self.get_set_bonus(show_rarity=show_rarity)
         embeds = [
-            stig.to_embed(show_rarity=not show_rarity)
-            for stig in (self.T, self.M, self.B)
-            if stig
+            stig.to_embed(show_rarity=not show_rarity) for stig in (self.T, self.M, self.B) if stig
         ]
         if set_embed:
             embeds.append(set_embed)
@@ -825,6 +791,7 @@ class StigmataSetModel(GenericWikiModel):
 
 
 # Weapons
+
 
 class IconMapping(Enum):
     pistol = "Pistols (Type)"
@@ -848,11 +815,7 @@ class WeaponSkillModel(GenericWikiModel):
         is_active = regex.match(r".*\[SP: \d+\].*", self.effect)
         icon = (Emoji.ACTIVE if is_active else Emoji.PASSIVE).value
 
-        return embed.add_field(
-            name=f"{icon} {self.name}",
-            value=self.effect,
-            inline=False
-        )
+        return embed.add_field(name=f"{icon} {self.name}", value=self.effect, inline=False)
 
 
 class WeaponModel(GenericWikiModel):
@@ -885,23 +848,18 @@ class WeaponModel(GenericWikiModel):
 
     def to_embed(self) -> list[Embed]:
         stats = ",\u2003".join(
-            f"**{name}**: {stat}"
-            for name, stat in (
-                ("ATK", self.ATK),
-                ("CRT", self.CRT)
-            )
-            if stat
+            f"**{name}**: {stat}" for name, stat in (("ATK", self.ATK), ("CRT", self.CRT)) if stat
         )
         desc = f"Rarity: {self.rarity * Emoji.STAR.value}\n{self.description}\n\n{stats}"
 
-        title_embed = Embed(
-            description=desc
-        ).set_author(
-            name=self.name.name,
-            url=self.name.link,
-            icon_url=image_link(IconMapping[self.type].value)
-        ).set_thumbnail(
-            url=image_link(f"{self.name.name} ({self.rarity}) (Icon)")
+        title_embed = (
+            Embed(description=desc)
+            .set_author(
+                name=self.name.name,
+                url=self.name.link,
+                icon_url=image_link(IconMapping[self.type].value),
+            )
+            .set_thumbnail(url=image_link(f"{self.name.name} ({self.rarity}) (Icon)"))
         )
 
         skill_embed = reduce(

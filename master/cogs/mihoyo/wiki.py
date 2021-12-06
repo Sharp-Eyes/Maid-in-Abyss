@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from disnake.ext import commands
 from disnake import ApplicationCommandInteraction as Interaction
+from disnake.ext import commands
 
-from typing import Type, TypeVar, Callable
-
-from utils.bot import CustomBot
+from typing import Callable, Type, TypeVar
+from models.wiki import QueryPage  # TODO: remove
 from models.wiki import (
-    ValidCategory, QueryResponse,
-    ContentResponseModel, BattlesuitModel, StigmataSetModel, WeaponModel,
-    QueryPage  # TODO: remove
+    BattlesuitModel,
+    ContentResponseModel,
+    QueryResponse,
+    StigmataSetModel,
+    ValidCategory,
+    WeaponModel,
 )
-
+from utils.bot import CustomBot
 
 BASE_WIKI_URL = "https://honkaiimpact3.fandom.com/"
 BASE_API_URL = "https://honkaiimpact3.fandom.com/api.php?"
@@ -22,8 +24,8 @@ ResponseModel = TypeVar("ResponseModel")
 
 # Cog
 
-class WikiCog(commands.Cog):
 
+class WikiCog(commands.Cog):
     def __init__(self, bot: CustomBot):
         self.bot = bot
 
@@ -61,7 +63,7 @@ class WikiCog(commands.Cog):
     async def API_request(
         self,
         params: dict[str, str],
-        response_model: Type[ResponseModel] | Callable[..., ResponseModel]
+        response_model: Type[ResponseModel] | Callable[..., ResponseModel],
     ) -> ResponseModel:
         async with self.bot.session.get(BASE_API_URL, params=params) as resp:
             data = await resp.json()
@@ -82,9 +84,10 @@ class WikiCog(commands.Cog):
         await self.populate_wiki_cache()
         print("reloaded wiki cache")
 
-    @commands.slash_command(name="wiki", guild_ids=[
-        701039771157397526, 511630315039490076, 555270199402823682, 268046379085987840
-    ])
+    @commands.slash_command(
+        name="wiki",
+        guild_ids=[701039771157397526, 511630315039490076, 555270199402823682, 268046379085987840],
+    )
     async def wiki(self, inter: Interaction, query: str):
         await inter.response.defer()
         page: QueryPage = self.bot.wiki_cache.get(query)
@@ -95,38 +98,55 @@ class WikiCog(commands.Cog):
             "prop": "revisions",
             "pageids": page.pageid,
             "rvprop": "content",
-            "rvslots": "main"
+            "rvslots": "main",
         }
         content = await self.API_request(page_params, ContentResponseModel)
 
-        if page.categories.intersection({
-            ValidCategory.PSY, ValidCategory.BIO, ValidCategory.MECH,
-            ValidCategory.QUA, ValidCategory.IMG
-        }):
+        if page.categories.intersection(
+            {
+                ValidCategory.PSY,
+                ValidCategory.BIO,
+                ValidCategory.MECH,
+                ValidCategory.QUA,
+                ValidCategory.IMG,
+            }
+        ):
             wiki_result = BattlesuitModel(content=content)
 
-        elif page.categories.intersection({
-            ValidCategory.STIGMA1, ValidCategory.STIGMA2, ValidCategory.STIGMA3,
-            ValidCategory.STIGMA4, ValidCategory.STIGMA5
-        }):
+        elif page.categories.intersection(
+            {
+                ValidCategory.STIGMA1,
+                ValidCategory.STIGMA2,
+                ValidCategory.STIGMA3,
+                ValidCategory.STIGMA4,
+                ValidCategory.STIGMA5,
+            }
+        ):
             wiki_result = StigmataSetModel(
-                stigs=dict.fromkeys(("T", "M", "B"), page.title),
-                content=content
+                stigs=dict.fromkeys(("T", "M", "B"), page.title), content=content
             )
 
-        elif page.categories.intersection({
-            ValidCategory.PISTOL, ValidCategory.KATANA, ValidCategory.CANNON,
-            ValidCategory.GREATSWORD, ValidCategory.CROSS, ValidCategory.GAUNTLET,
-            ValidCategory.SCYTHE, ValidCategory.LANCE, ValidCategory.BOW
-        }):
+        elif page.categories.intersection(
+            {
+                ValidCategory.PISTOL,
+                ValidCategory.KATANA,
+                ValidCategory.CANNON,
+                ValidCategory.GREATSWORD,
+                ValidCategory.CROSS,
+                ValidCategory.GAUNTLET,
+                ValidCategory.SCYTHE,
+                ValidCategory.LANCE,
+                ValidCategory.BOW,
+            }
+        ):
             data = content.highest_rarity_by_name(page.title).data
             wiki_result = WeaponModel(**data)
 
         else:
             await inter.edit_original_message(
                 content="It appears this type of query hasn't been implemented yet. "
-                        "Please check back soon:tm:. For now, have this "
-                        f"[link]({BASE_WIKI_URL}?curid={page.pageid})."
+                "Please check back soon:tm:. For now, have this "
+                f"[link]({BASE_WIKI_URL}?curid={page.pageid})."
             )
             return
 

@@ -1,15 +1,10 @@
-from typing import Any, Optional, List, Dict
-from odmantic import Model, Field
+from typing import Any, Dict, List, Optional
+from odmantic import Field, Model
 
-
-__all__ = (
-    "ViewModel",
-    "GuildModel"
-)
+__all__ = ("ViewModel", "GuildModel")
 
 
 class ViewModel(Model):
-
     class Config:
         collection = "views"
 
@@ -21,7 +16,6 @@ class ViewModel(Model):
 
 
 class GuildModel(Model):
-
     class Config:
         collection = "guilds"
 

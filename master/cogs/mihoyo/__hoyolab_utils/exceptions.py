@@ -7,7 +7,7 @@ all = (
     "validate_API_response",
     "AlreadySigned",
     "FirstSign",
-    "UnintelligibleResponseError"
+    "UnintelligibleResponseError",
 )
 
 
@@ -92,11 +92,12 @@ def validate_API_response(response: dict):
             "most API endpoints, unfortunately code redemption requires them to be set. "
             "Please enter the missing cookies using `/gwiki auth set` if you wish to be "
             "able to use redeem codes."
-        )
+        ),
     }.get(response["retcode"], HoyolabAPIError())
 
     error.set_response(response)
     raise error
+
 
 # Errors not based on retcodes
 
@@ -107,6 +108,7 @@ class AlreadySigned(HoyolabAPIError):
 
 class FirstSign(HoyolabAPIError):
     """Attempted to claim check-in rewards without first having claimed once manually."""
+
 
 # class AccountNotFound(HoyolabAPIError):
 #     """Passed an invalid UID """

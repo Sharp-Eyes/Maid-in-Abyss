@@ -1,25 +1,17 @@
 from __future__ import annotations
 
-from .exceptions import (
-    validate_API_response, UnintelligibleResponseError, FirstSign,
-    AlreadySigned
-)
-
 import asyncio
-import aiohttp
-
 import datetime
-import pytz
-import string
 import hashlib
-import json
-from numpy import random
-from typing import Union, Literal
-
-from utils.classes import Paths
-from utils.helpers import nested_get
-
 import logging
+import string
+from typing import Literal, Union
+import aiohttp
+import pytz
+from numpy import random
+
+from .exceptions import AlreadySigned, FirstSign, UnintelligibleResponseError, validate_API_response
+
 logger = logging.getLogger("GAPI")
 
 
@@ -43,17 +35,14 @@ HEADERS = {
     # authentication headers
     "ds": "",
     # recommended headers
-    "user-agent": USER_AGENT
+    "user-agent": USER_AGENT,
 }
 
 DAILY_SIGNIN_URL = {
     "Honkai Impact": "https://api-os-takumi.mihoyo.com/event/mani/",
-    "Genshin Impact": "https://hk4e-api-os.mihoyo.com/event/sol/"
+    "Genshin Impact": "https://hk4e-api-os.mihoyo.com/event/sol/",
 }
-ACT_ID = {
-    "Honkai Impact": "e202110291205111",
-    "Genshin Impact": "e202102251931481"
-}
+ACT_ID = {"Honkai Impact": "e202110291205111", "Genshin Impact": "e202102251931481"}
 
 ValidRequestType = Union[aiohttp.ClientSession.get, aiohttp.ClientSession.post]
 ValidGame = Literal["Honkai Impact", "Genshin Impact"]
@@ -62,9 +51,9 @@ ValidGame = Literal["Honkai Impact", "Genshin Impact"]
 def generate_ds_token(salt: str = DS_SALT) -> str:
     """Create a new ds token for authentication."""
     t = int(datetime.datetime.utcnow().toordinal())  # current seconds
-    r = ''.join(random.choice(list(string.ascii_letters), 6))  # 6 random chars
+    r = "".join(random.choice(list(string.ascii_letters), 6))  # 6 random chars
     h = hashlib.md5(f"salt={salt}&t={t}&r={r}".encode()).hexdigest()  # hash and get hex
-    return f'{t},{r},{h}'
+    return f"{t},{r},{h}"
 
 
 def get_API_datetime() -> datetime.datetime:
@@ -96,12 +85,7 @@ class Hoyolab_API:
         return API_datetime.strftime("%Y-%m-%d")
 
     async def fetch_endpoint(
-        self,
-        endpoint_url: str,
-        *,
-        request_type: str = "get",
-        cookies: dict = None,
-        **params
+        self, endpoint_url: str, *, request_type: str = "get", cookies: dict = None, **params
     ) -> dict:
         """Make an API call to the given endpoint url with provided authorization cookies.
         API calls can be either POST or GET, dependent on the endpoint. Can be provided with
@@ -127,12 +111,7 @@ class Hoyolab_API:
         headers["ds"] = generate_ds_token()
 
         request: ValidRequestType = getattr(self.session, request_type)
-        async with request(
-            endpoint_url,
-            headers=headers,
-            cookies=cookies,
-            json=params
-        ) as response:
+        async with request(endpoint_url, headers=headers, cookies=cookies, json=params) as response:
 
             try:
                 response_data: dict = await response.json()
@@ -150,8 +129,7 @@ class Hoyolab_API:
     async def get_game_accounts(cls, *, cookies) -> dict:
         """Get the game accounts of the user with the provided cookies."""
         data = await cls.fetch_endpoint(
-            "https://api-os-takumi.mihoyo.com/binding/api/getUserGameRolesByCookie",
-            cookies=cookies
+            "https://api-os-takumi.mihoyo.com/binding/api/getUserGameRolesByCookie", cookies=cookies
         )
         return data["list"]
 
@@ -161,9 +139,7 @@ class Hoyolab_API:
         """
         params = {"act_id": ACT_ID[game]}
         response = await cls.fetch_endpoint(
-            DAILY_SIGNIN_URL[game] + "info",
-            cookies=cookies,
-            **params
+            DAILY_SIGNIN_URL[game] + "info", cookies=cookies, **params
         )
 
         if response["first_bind"]:
@@ -182,15 +158,9 @@ class Hoyolab_API:
     async def daily_claim_exec(cls, game, *, cookies: dict[str, str]):
         """Sign into Hoyolab to claim daily rewards."""
 
-        params = {
-            "lang": "en-us",
-            "act_id": ACT_ID[game]
-        }
+        params = {"lang": "en-us", "act_id": ACT_ID[game]}
         response = await cls.fetch_endpoint(
-            DAILY_SIGNIN_URL[game] + "sign",
-            request_type="post",
-            cookies=cookies,
-            **params
+            DAILY_SIGNIN_URL[game] + "sign", request_type="post", cookies=cookies, **params
         )
 
         return response
@@ -201,24 +171,16 @@ class Hoyolab_API:
             for account in await cls.get_game_accounts(cookies=cookies)
             if account["level"] >= 10
         ]
-        const_params = {
-            "cdkey": cdkey,
-            "game_biz": "hk4e_global",
-            "lang": "en"
-        }
-        filtered_cookies = {
-            k: v
-            for k, v in cookies.items()
-            if k in ["account_id", "cookie_token"]
-        }
+        const_params = {"cdkey": cdkey, "game_biz": "hk4e_global", "lang": "en"}
+        filtered_cookies = {k: v for k, v in cookies.items() if k in ["account_id", "cookie_token"]}
 
         for i, acc in enumerate(accs):
             if i:
-                await asyncio.sleep(5)    # Ratelimit
+                await asyncio.sleep(5)  # Ratelimit
             await cls.fetch_endpoint(
                 "https://hk4e-api-os.mihoyo.com/common/apicdkey/api/webExchangeCdkey",
                 cookies=filtered_cookies,
                 uid=acc["game_uid"],
                 region=acc["region"],
-                **const_params
+                **const_params,
             )

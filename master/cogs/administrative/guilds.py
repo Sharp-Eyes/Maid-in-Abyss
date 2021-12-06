@@ -1,24 +1,18 @@
 from __future__ import annotations
-import inspect
 
 import disnake
+from disnake import ApplicationCommandInteraction as Interaction
+from disnake import ButtonStyle, MessageInteraction, SelectOption
 from disnake.channel import TextChannel
 from disnake.ext import commands
-from disnake.ext.commands import Param
-from disnake import (
-    ApplicationCommandInteraction as Interaction,
-    MessageInteraction,
-    ButtonStyle,
-    SelectOption
-)
-from disnake.ui import View, Select, Button
+from disnake.ui import Button, Select, View
 
-from typing import Callable, Optional
-from typing_extensions import Self
+import inspect
 from enum import Enum
-
-from utils.bot import CustomBot
+from typing import Callable, Optional
 from models import ViewModel
+from typing_extensions import Self
+from utils.bot import CustomBot
 
 
 class SetupViewState(Enum):
@@ -30,26 +24,18 @@ class SetupViewState(Enum):
 class ReturnButton(Button):
     view: SetupView
 
-    def __init__(
-        self,
-        *,
-        custom_id_pfx: str,
-        row: Optional[int] = None
-    ):
+    def __init__(self, *, custom_id_pfx: str, row: Optional[int] = None):
         super().__init__(
             style=ButtonStyle.gray,
             label="Return to Setup",
             custom_id=custom_id_pfx + "_to_setup_return_btn",
             row=row,
-            emoji="<:caution_mark:905440121464193085>"
+            emoji="<:caution_mark:905440121464193085>",
         )
 
     async def callback(self, inter: MessageInteraction):
         await self.view.change_state(SetupViewState.DEFAULT)
-        await inter.response.edit_message(
-            embed=self.view.embed,
-            view=self.view
-        )
+        await inter.response.edit_message(embed=self.view.embed, view=self.view)
 
 
 class ConditionalButton(Button):
@@ -62,15 +48,10 @@ class ConditionalButton(Button):
         style: ButtonStyle,
         emoji: str,
         custom_id: str,
-        row: Optional[int] = None
+        row: Optional[int] = None,
     ):
         super().__init__(
-            style=style,
-            label=label,
-            custom_id=custom_id,
-            row=row,
-            disabled=True,
-            emoji=emoji
+            style=style, label=label, custom_id=custom_id, row=row, disabled=True, emoji=emoji
         )
 
     async def maybe_enable(self) -> None:
@@ -82,7 +63,6 @@ class ConditionalButton(Button):
 
 
 class CoopConfirmButton(ConditionalButton):
-
     def maybe_enable(self) -> None:
         """Enables the button if both a channel and games have been selected"""
         for item in self.view.children:
@@ -98,24 +78,18 @@ class CoopConfirmButton(ConditionalButton):
     async def callback(self, inter: MessageInteraction):
         selections = self.view.selections
         await self.view.change_state(SetupViewState.DEFAULT)
-        await inter.response.edit_message(
-            embed=self.view.embed,
-            view=self.view
-        )
+        await inter.response.edit_message(embed=self.view.embed, view=self.view)
         embed = disnake.Embed(
             title="Coop setup | Pending...",
-            description="Your changes have been noted, and should appear in the guild soon..."
-        ).set_author(
-            name=inter.author.display_name,
-            icon_url=inter.author.display_avatar.url
-        )
+            description="Your changes have been noted, and should appear in the guild soon...",
+        ).set_author(name=inter.author.display_name, icon_url=inter.author.display_avatar.url)
         confirmation_message = await inter.followup.send(embed=embed)
 
         self.view.bot.dispatch(
             "coop_setup",  # cogs.display.coop // CoopCog.setup_coop_remote
             channel=selections["coop_setup_channel_selector"],
             games=selections["coop_setup_game_selector"],
-            progress_message=confirmation_message
+            progress_message=confirmation_message,
         )
 
 
@@ -128,14 +102,12 @@ class CoopTeardownButton(ConditionalButton):
             style=ButtonStyle.red,
             custom_id="coop_setup_teardown_btn",
             emoji="<:cross_mark:904873627466477678>",
-            row=row
+            row=row,
         )
 
     async def maybe_enable(self) -> None:
         maybe_view = await self.view.bot.db.find_one(
-            ViewModel,
-            ViewModel.type == "coop",
-            ViewModel.guild_id == self.view.guild.id
+            ViewModel, ViewModel.type == "coop", ViewModel.guild_id == self.view.guild.id
         )
         self.disabled = not maybe_view
 
@@ -144,28 +116,21 @@ class CoopTeardownButton(ConditionalButton):
         await inter.response.edit_message(embed=self.view.embed, view=self.view)
         embed = disnake.Embed(
             title="Coop teardown | Pending...",
-            description="Your changes have been noted, and should appear in the guild soon..."
-        ).set_author(
-            name=inter.author.display_name,
-            icon_url=inter.author.display_avatar.url
-        )
+            description="Your changes have been noted, and should appear in the guild soon...",
+        ).set_author(name=inter.author.display_name, icon_url=inter.author.display_avatar.url)
         confirmation_message = await inter.followup.send(embed=embed)
 
         self.view.bot.dispatch(
             "coop_teardown",  # cogs.display.coop // CoopCog.teardown_coop_remote
             guild=self.view.guild,
-            progress_message=confirmation_message
+            progress_message=confirmation_message,
         )
 
 
 class SetupPicker(Select):
     view: SetupView
 
-    def __init__(
-        self,
-        *,
-        row: Optional[int] = None
-    ):
+    def __init__(self, *, row: Optional[int] = None):
         options = [
             SelectOption(label=k, value=v)
             for k, v in (
@@ -177,17 +142,14 @@ class SetupPicker(Select):
             custom_id="guild_setup",
             placeholder="Select what to set up...",
             options=options,
-            row=row
+            row=row,
         )
 
     async def callback(self, inter: MessageInteraction):
         selected = SetupViewState(self.values[0])
         await self.view.change_state(selected)
 
-        await inter.response.edit_message(
-            embed=self.view.embed,
-            view=self.view
-        )
+        await inter.response.edit_message(embed=self.view.embed, view=self.view)
 
 
 class SetupChannelPicker(Select):
@@ -205,8 +167,7 @@ class SetupChannelPicker(Select):
         self.channels = [
             channel
             for channel in guild.channels
-            if isinstance(channel, TextChannel)
-            and channel.permissions_for(guild.me).send_messages
+            if isinstance(channel, TextChannel) and channel.permissions_for(guild.me).send_messages
         ]
         super().__init__(
             custom_id=custom_id_pfx + "_channel_selector",
@@ -214,11 +175,11 @@ class SetupChannelPicker(Select):
             options=[
                 SelectOption(
                     label=channel.name,
-                    description=channel.category.name if channel.category else ""
+                    description=channel.category.name if channel.category else "",
                 )
                 for channel in self.channels[:25]
             ],
-            row=row
+            row=row,
         )
 
     async def callback(self, inter: MessageInteraction):
@@ -241,19 +202,13 @@ class SetupGamePicker(Select):
         custom_id_pfx: str,
         row: Optional[int] = None,
     ):
-        self.games = [
-            "Honkai Impact",
-            "Genshin Impact"
-        ]
+        self.games = ["Honkai Impact", "Genshin Impact"]
         super().__init__(
             custom_id=custom_id_pfx + "_game_selector",
             placeholder="Select coop games...",
-            options=[
-                SelectOption(label=game)
-                for game in self.games
-            ],
+            options=[SelectOption(label=game) for game in self.games],
             max_values=len(self.games),
-            row=row
+            row=row,
         )
 
     async def callback(self, inter: MessageInteraction):
@@ -270,10 +225,7 @@ class SetupView(View):
     state = disnake.utils.MISSING
 
     def __init__(
-        self,
-        guild: disnake.Guild,
-        bot: CustomBot,
-        state: SetupViewState = SetupViewState.DEFAULT
+        self, guild: disnake.Guild, bot: CustomBot, state: SetupViewState = SetupViewState.DEFAULT
     ):
         super().__init__(timeout=None)
         self.guild = guild
@@ -296,10 +248,7 @@ class SetupView(View):
         state_modifier, self._embed = self.state_mapping[state]
         state_modifier(self)
 
-        current = await self.bot.db.find_one(
-            ViewModel,
-            ViewModel.guild_id == self.guild.id
-        )
+        current = await self.bot.db.find_one(ViewModel, ViewModel.guild_id == self.guild.id)
         current.data["state"] = state.value
         await self.bot.db.save(current)
 
@@ -311,29 +260,39 @@ class SetupView(View):
         self.add_item(SetupPicker(row=0))
 
     def to_coop_state(self) -> None:
-        self.add_item(SetupChannelPicker(
-            self.guild,
-            custom_id_pfx="coop_setup",
-            row=0,
-        ))
-        self.add_item(SetupGamePicker(
-            custom_id_pfx="coop_setup",
-            row=1,
-        ))
-        self.add_item(CoopConfirmButton(
-            "Confirm Selections",
-            style=ButtonStyle.green,
-            custom_id="coop_setup_confirm_btn",
-            emoji="<:check_mark:904873627437125673>",
-            row=2,
-        ))
-        self.add_item(CoopTeardownButton(
-            row=2,
-        ))
-        self.add_item(ReturnButton(
-            custom_id_pfx="coop_setup",
-            row=2,
-        ))
+        self.add_item(
+            SetupChannelPicker(
+                self.guild,
+                custom_id_pfx="coop_setup",
+                row=0,
+            )
+        )
+        self.add_item(
+            SetupGamePicker(
+                custom_id_pfx="coop_setup",
+                row=1,
+            )
+        )
+        self.add_item(
+            CoopConfirmButton(
+                "Confirm Selections",
+                style=ButtonStyle.green,
+                custom_id="coop_setup_confirm_btn",
+                emoji="<:check_mark:904873627437125673>",
+                row=2,
+            )
+        )
+        self.add_item(
+            CoopTeardownButton(
+                row=2,
+            )
+        )
+        self.add_item(
+            ReturnButton(
+                custom_id_pfx="coop_setup",
+                row=2,
+            )
+        )
 
     async def update_items(self):
         for item in self.children:
@@ -352,12 +311,7 @@ class SetupView(View):
     def embed(self) -> disnake.Embed:
         return self._embed
 
-    state_mapping: dict[
-        SetupViewState, tuple[
-            Callable[[Self], None],
-            disnake.Embed
-        ]
-    ] = {
+    state_mapping: dict[SetupViewState, tuple[Callable[[Self], None], disnake.Embed]] = {
         SetupViewState.DEFAULT: (
             to_default_state,
             disnake.Embed(
@@ -388,12 +342,11 @@ class SetupView(View):
                     " channel you selected."
                 ),
             ),
-        )
+        ),
     }
 
 
 class Guild_Cog(commands.Cog):
-
     def __init__(self, bot: CustomBot):
         self.bot = bot
 
@@ -402,25 +355,20 @@ class Guild_Cog(commands.Cog):
             guild = await self.bot.getch_guild(view_data.guild_id)
             self.bot.add_view(
                 SetupView(guild, self.bot, SetupViewState(view_data.data["state"])),
-                message_id=view_data.id
+                message_id=view_data.id,
             )
 
             print(f"registered setup view with id {view_data.id}")
 
     @commands.slash_command(
         name="setup",
-        guild_ids=[
-            701039771157397526, 511630315039490076, 555270199402823682, 268046379085987840
-        ]
+        guild_ids=[701039771157397526, 511630315039490076, 555270199402823682, 268046379085987840],
     )
     @commands.has_permissions(manage_guild=True)
     async def setuptest(self, inter: Interaction):
 
         view = SetupView(inter.guild, self.bot)
-        await inter.send(
-            embed=view.embed,
-            view=view
-        )
+        await inter.send(embed=view.embed, view=view)
 
         response = await inter.original_message()
         view_data = ViewModel(
@@ -428,12 +376,10 @@ class Guild_Cog(commands.Cog):
             type="setup",
             channel_id=inter.channel_id,
             guild_id=inter.guild_id,
-            data={"state": view.state.value}
+            data={"state": view.state.value},
         )
         existing = await self.bot.db.find_one(
-            ViewModel,
-            ViewModel.guild_id == inter.guild_id,
-            ViewModel.type == "setup"
+            ViewModel, ViewModel.guild_id == inter.guild_id, ViewModel.type == "setup"
         )
         if existing:
             await self.bot.db.delete(existing)

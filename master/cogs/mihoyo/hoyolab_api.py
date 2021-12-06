@@ -6,24 +6,22 @@
 from __future__ import annotations
 
 import disnake
-from disnake.ext import commands
-
 from disnake import ApplicationCommandInteraction as Interaction
+from disnake.ext import commands
 from disnake.ext.commands import Param
 from disnake.ext.tasks import loop
 
-from datetime import time
+import logging
 from collections import defaultdict
+from datetime import time
 from typing import Optional
+from models.hoyolab import CookieModel, DiscordUserDataModel, HoyolabAccountModel
 from pydantic import ValidationError
-
 from utils.bot import CustomBot
-from models.hoyolab import DiscordUserDataModel, HoyolabAccountModel, CookieModel
 
 from .__hoyolab_utils import Hoyolab_API, ValidGame
 from .__hoyolab_utils.exceptions import AlreadySigned, FirstSign, HoyolabAPIError
 
-import logging
 logger = logging.getLogger("Hoyolab_API")
 
 
@@ -37,23 +35,18 @@ HOYOLAB_CLAIM_RESET = time.fromisoformat("16:00:02")
 
 # display / possibly move to separate file if more display classes are needed
 
+
 class UserSigninResult:
     """Simplifies parsing and handling sign-in result embed creation."""
 
-    base_embed = disnake.Embed(
-        title="Sign-in Results:",
-        description="\u200b"
-    )
+    base_embed = disnake.Embed(title="Sign-in Results:", description="\u200b")
 
     def __init__(self, *, suppressed: tuple[HoyolabAPIError] = tuple()):
         self.results: defaultdict[str, list[str]] = defaultdict(list)
         self.suppressed = suppressed
 
     def add_user_account_result(
-        self,
-        account: HoyolabAccountModel,
-        game: ValidGame,
-        result: Optional[HoyolabAPIError]
+        self, account: HoyolabAccountModel, game: ValidGame, result: Optional[HoyolabAPIError]
     ) -> None:
         """Add a sign-in result for the user. For param result, pass the error
         returned by the claim function in case it failed, otherwise pass None
@@ -87,17 +80,14 @@ class UserSigninResult:
 
         embed = self.base_embed.copy()
         for account_name, messages in self.results.items():
-            embed.add_field(
-                name=account_name,
-                value="\n".join(messages)
-            )
+            embed.add_field(name=account_name, value="\n".join(messages))
         return embed
 
 
 # cog
 
-class HoyolabApiCog(commands.Cog):
 
+class HoyolabApiCog(commands.Cog):
     def __init__(self, bot: CustomBot):
         self.bot = bot
 
@@ -119,7 +109,7 @@ class HoyolabApiCog(commands.Cog):
 
         self.emoji = {
             "CHECK": self.bot.get_emoji(904873627437125673),
-            "CROSS": self.bot.get_emoji(904873627466477678)
+            "CROSS": self.bot.get_emoji(904873627466477678),
         }
 
         if not self.hoyo_signin_auto.is_running():
@@ -155,21 +145,23 @@ class HoyolabApiCog(commands.Cog):
         name: str = Param(desc="How you want your account to be displayed."),
         game: str = Param(choices=["Honkai Impact", "Genshin Impact"]),
         ltuid: str = Param(
-            "", desc="If selected, please make sure to also use LTOKEN.",
+            "",
+            desc="If selected, please make sure to also use LTOKEN.",
         ),
         ltoken: str = Param(
-            "", desc="If selected, please make sure to also use LTUID.",
+            "",
+            desc="If selected, please make sure to also use LTUID.",
         ),
         account_id: str = Param(
-            "", desc="If selected, please make sure to also use COOKIE_TOKEN.",
+            "",
+            desc="If selected, please make sure to also use COOKIE_TOKEN.",
         ),
         cookie_token: str = Param(
-            "", desc="If selected, please make sure to also use ACCOUNT_ID.",
-        )
+            "",
+            desc="If selected, please make sure to also use ACCOUNT_ID.",
+        ),
     ):
-        user = disnake.utils.get(
-            self.user_cache, discord_id=inter.author.id
-        )
+        user = disnake.utils.get(self.user_cache, discord_id=inter.author.id)
         inter.send
         if not any([ltuid, ltoken, account_id, cookie_token]):
             # Assume we're just adding a game
@@ -177,7 +169,7 @@ class HoyolabApiCog(commands.Cog):
                 return await inter.response.send_message(
                     f"{inter.author.mention}, you should first setup an account. "
                     "Please run this command again and specify your login cookies.",
-                    ephemeral=True
+                    ephemeral=True,
                 )
 
             account = disnake.utils.get(user.hoyolab.accounts, name=name)
@@ -185,7 +177,7 @@ class HoyolabApiCog(commands.Cog):
                 return await inter.response.send_message(
                     f"{inter.author.message}, you do not appear to have an account with "
                     "that name. Please pick an existing option or create an account first.",
-                    ephemeral=True
+                    ephemeral=True,
                 )
 
             await self._do_account_game_update(inter, account, game)
@@ -193,10 +185,7 @@ class HoyolabApiCog(commands.Cog):
 
         try:
             new_cookies = CookieModel(
-                ltuid=ltuid,
-                ltoken=ltoken,
-                account_id=account_id,
-                cookie_token=cookie_token
+                ltuid=ltuid, ltoken=ltoken, account_id=account_id, cookie_token=cookie_token
             )
         except ValidationError as e:
             # TODO: Make pydantic error parser?
@@ -207,13 +196,15 @@ class HoyolabApiCog(commands.Cog):
         if user is None:
             new_user = await DiscordUserDataModel.create_new(
                 _id=inter.author.id,
-                hoyolab_data={"accounts": [{"name": name, "games": [game], "cookies": new_cookies}]}
+                hoyolab_data={
+                    "accounts": [{"name": name, "games": [game], "cookies": new_cookies}]
+                },
             )
             self.user_cache.append(new_user)
 
             return await inter.response.send_message(
                 f"Successfully added your account with {new_cookies} and bound it to {game}!",
-                ephemeral=True
+                ephemeral=True,
             )
 
         for account in user.hoyolab.accounts:
@@ -237,16 +228,13 @@ class HoyolabApiCog(commands.Cog):
             user.hoyolab.add_new_account(new_cookies, game)
             await inter.response.send_message(
                 f"Successfully added your account with {new_cookies} and bound it to {game}!",
-                ephemeral=True
+                ephemeral=True,
             )
 
         await user.commit()
 
     async def _do_account_game_update(
-        self,
-        inter: Interaction,
-        account: HoyolabAccountModel,
-        game: ValidGame
+        self, inter: Interaction, account: HoyolabAccountModel, game: ValidGame
     ):
         try:
             account.update_games(game)
@@ -325,9 +313,7 @@ class HoyolabApiCog(commands.Cog):
     async def hoyo_claim_account_autocomp(self, inter: Interaction, inp: str):
         user = disnake.utils.get(self.user_cache, discord_id=inter.author.id)
         return [
-            account.name
-            for account in user.hoyolab.accounts
-            if inp.lower() in account.name.lower()
+            account.name for account in user.hoyolab.accounts if inp.lower() in account.name.lower()
         ]
 
     @hoyo_signin.autocomplete("games")
@@ -348,9 +334,7 @@ class HoyolabApiCog(commands.Cog):
 
         games.difference_update(prev)
         return [
-            ", ".join([*[p.title() for p in prev], game.title()])
-            for game in games
-            if curr in game
+            ", ".join([*[p.title() for p in prev], game.title()]) for game in games if curr in game
         ]
 
     @commands.command(name="force_autoclaim")
