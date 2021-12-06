@@ -3,13 +3,17 @@ from disnake.ext import commands
 
 import datetime
 import json
+import os
 import re
+import sys
 from collections.abc import Mapping
 from functools import partial
 from itertools import groupby
 from os import walk
 from typing import Any, Optional, Union
 from bs4 import BeautifulSoup, NavigableString
+
+MAIN_DIR = os.path.dirname(sys.modules["__main__"].__file__)
 
 DEFAULT_EXT_DIR_BLACKLIST = r"__.*"
 DEFAULT_EXT_FILE_BLACKLIST = r"__.*"
@@ -106,7 +110,7 @@ def create_time_markdown(time: Union[int, datetime.datetime], format: str) -> st
 
 
 # Extension management
-from .classes import Paths
+# from .classes import Paths
 
 
 def search_all_extensions(
@@ -127,7 +131,7 @@ def search_all_extensions(
         By default, ignores all files starting with "__".
     """
 
-    for dirpath, _, filenames in walk(Paths.cogs):
+    for dirpath, _, filenames in walk(os.path.join(MAIN_DIR, "cogs")):
         cur_dir = dirpath.rsplit("\\", 1)[1]
         if re.match(blacklisted_dirs, cur_dir):
             continue
@@ -139,19 +143,19 @@ def search_all_extensions(
             if re.match(blacklisted_files, filename):
                 continue
 
-            ext_path = dirpath.split(Paths.root, 1)[1].replace("\\", ".")
+            ext_path = os.path.relpath(dirpath, MAIN_DIR).replace(os.path.sep, ".")
             yield f"{ext_path}.{filename}"
 
 
-def custom_modules_from_globals(glb: dict) -> set:
-    """Returns a set of all modules loaded in globals that are defined in cogs or utils."""
+# def custom_modules_from_globals(glb: dict) -> set:
+#     """Returns a set of all modules loaded in globals that are defined in cogs or utils."""
 
-    pat = r"cogs\..*|utils\..*"
-    return {
-        module_name
-        for v in glb.values()
-        if hasattr(v, "__module__") and re.match(pat, module_name := v.__module__)
-    }
+#     pat = r"cogs\..*|utils\..*"
+#     return {
+#         module_name
+#         for v in glb.values()
+#         if hasattr(v, "__module__") and re.match(pat, module_name := v.__module__)
+#     }
 
 
 def get_role_by_name(name: str, guild: disnake.Guild) -> Optional[disnake.Role]:
