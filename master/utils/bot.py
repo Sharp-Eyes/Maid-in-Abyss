@@ -23,7 +23,6 @@ reload_logger.setLevel(logging.DEBUG)
 
 __all__ = "CustomBot" "FullReloadCog"
 
-disnake.embeds.Embed
 
 load_dotenv()
 user, pw, db_default = os.getenv("MONGO_USER"), os.getenv("MONGO_PASS"), os.getenv("MONGO_DB")
