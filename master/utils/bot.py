@@ -1,17 +1,21 @@
+from __future__ import annotations
+
+import disnake
 from disnake.ext import commands
 from disnake.ext.commands import ExtensionNotLoaded
 from disnake.ext.commands.common_bot_base import _is_submodule
+from disnake.types.embed import Embed as EmbedDict
 
 import aiohttp
 from motor import motor_asyncio as motor
+from odmantic import AIOEngine
 import sys
 import os
 import importlib.util
 from dotenv import load_dotenv
 from types import ModuleType
-from typing import Any, Optional, Mapping
+from typing import Any, Callable, Optional, Mapping, Union
 from dataclasses import dataclass, field
-
 
 import logging
 reload_logger = logging.getLogger("reload")
@@ -23,6 +27,7 @@ __all__ = (
     "FullReloadCog"
 )
 
+disnake.embeds.Embed
 
 load_dotenv()
 user, pw, db_default = os.getenv("MONGO_USER"), os.getenv("MONGO_PASS"), os.getenv("MONGO_DB")
@@ -39,8 +44,12 @@ START = object()
 def is_custom_module(module: ModuleType) -> bool:
     """Check whether the passed module is a 'custom module'. This is done by checking
     whether the module's directory is a subdirectory of where the main file is located.
+
+    For sake of sanity, also prevents reloading _this_ module
     """
     if not hasattr(module, "__file__"):  # certain builtins such as sys don't have __file__
+        return False
+    if module.__name__ == __name__:
         return False
     module_dir = os.path.dirname(module.__file__)
     return MAIN_DIR == os.path.commonpath([MAIN_DIR, module_dir])
@@ -161,10 +170,26 @@ def recursive_magic_fuckery(
 
 class CustomBot(commands.Bot):
 
+    def __init__(
+        self,
+        command_prefix: Optional[Union[str, list[str], Callable]] = None,
+        description: str = None,
+        **options: Any
+    ):
+        self._motor = motor.AsyncIOMotorClient(DB_URI)
+        self.db = AIOEngine(self._motor, "discord")
+        super().__init__(
+            command_prefix=command_prefix,
+            description=description,
+            **options
+        )
+
     async def start(self, token: str, *, reconnect: bool = True) -> None:
         self.session = aiohttp.ClientSession()
-        self.db = motor.AsyncIOMotorClient(DB_URI)
-        return await super().start(token, reconnect=reconnect)
+
+        self.dispatch("db_connected")
+
+        await super().start(token, reconnect=reconnect)
 
     async def close(self):
         await self.session.close()
@@ -279,8 +304,14 @@ class CustomBot(commands.Bot):
             # cleaned from the load_extension function call
             # so let's load it from our old compiled library.
             lib.setup(self)  # type: ignore
-            self.__extensions[name] = lib
+            self._CommonBotBase__extensions[name] = lib
 
             # revert sys.modules back to normal and raise back to caller
             sys.modules.update(modules)
             raise
+
+    async def getch_guild(self, id: int, /) -> disnake.Guild:
+        return self.get_guild(id) or await self.fetch_guild(id)
+
+    async def as_member(self, guild: disnake.Guild) -> Optional[disnake.Member]:
+        return disnake.utils.get(guild.members, id=self.user.id)

@@ -1,98 +1,73 @@
-import disnake
 from disnake.ext import commands
-from disnake.ext.commands.errors import BadArgument
+from disnake import ApplicationCommandInteraction as Interaction
 
 import traceback
-
-from utils.converters import ExtensionConverter
+from utils.bot import CustomBot
 
 
 class Extension_Manager(commands.Cog):
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: CustomBot):
         self.bot = bot
 
-    async def cog_check(self, ctx: commands.Context):
-        channel: disnake.TextChannel = ctx.channel
-        permissions = channel.permissions_for(ctx.author)
-        return permissions.administrator
+    @commands.slash_command(name="extensions", guild_ids=[701039771157397526])
+    async def extensions_slash(self, inter):
+        pass
 
-    __success_str = "Successfully {}ed extension(s) {}."
-
-    @staticmethod
-    def __make_ext_str(extensions):
-        return ", ".join(f"`{ext}`" for ext in extensions)
-
-    @staticmethod
-    def __handle_extensions(method, extensions):
-        for ext in extensions:
-            if isinstance(ext, BadArgument):
-                raise ext
-            method(ext)
-
-    @commands.command(
-        name="load"
-    )
-    async def load_exts(
+    @extensions_slash.sub_command(name="reload")
+    @commands.is_owner()
+    async def reload_slash(
         self,
-        ctx: commands.Context,
-        extensions: commands.Greedy[ExtensionConverter(loaded=False)]
+        inter: Interaction,
+        extension: str,
+        reload_submodules: bool
     ):
-        self.__handle_extensions(
-            self.bot.load_extension,
-            extensions
+        self.bot.reload_extension(extension, reload_submodules=reload_submodules)
+        return await inter.send(
+            f"Successfully reloaded extension `{extension}`",
+            ephemeral=True
         )
-        await ctx.send(self.__success_str.format(
-            "load",
-            self.__make_ext_str(extensions)
-        ))
 
-    @commands.command(
-        name="unload"
-    )
-    async def unload_exts(
+    @extensions_slash.sub_command(name="load")
+    @commands.is_owner()
+    async def load_slash(
         self,
-        ctx: commands.Context,
-        extensions: commands.Greedy[ExtensionConverter(unloaded=False)]
+        inter: Interaction,
+        extension: str,
     ):
-        self.__handle_extensions(
-            self.bot.unload_extension,
-            extensions
+        self.bot.load_extension(extension)
+        return await inter.send(
+            f"Successfully loaded extension `{extension}`",
+            ephemeral=True
         )
-        await ctx.send(self.__success_str.format(
-            "unload",
-            self.__make_ext_str(extensions)
-        ))
 
-    @commands.command(
-        name="reload"
-    )
-    async def reload_exts(
+    @extensions_slash.sub_command(name="unload")
+    @commands.is_owner()
+    async def unload_slash(
         self,
-        ctx: commands.Context,
-        extensions: commands.Greedy[ExtensionConverter(unloaded=False)]
+        inter: Interaction,
+        extension: str,
     ):
-
-        for cog in self.bot.cogs.values():
-            if cog.__module__ not in extensions: continue  # noqa: E701
-            if not hasattr(cog, "_prep_reload"): continue  # noqa: E701
-            cog._prep_reload()
-
-        self.__handle_extensions(
-            self.bot.reload_extension,
-            extensions
+        self.bot.unload_extension(extension)
+        return await inter.send(
+            f"Successfully unloaded extension `{extension}`",
+            ephemeral=True
         )
-        await ctx.send(self.__success_str.format(
-            "reload",
-            self.__make_ext_str(extensions)
-        ))
 
-    @load_exts.error
-    @unload_exts.error
-    @reload_exts.error
-    async def ext_error(self, ctx, error):
-        if isinstance(error, commands.BadArgument):
-            await ctx.send(error)
+    @reload_slash.autocomplete("extension")
+    @load_slash.autocomplete("extension")
+    @unload_slash.autocomplete("extension")
+    async def ext_autocomp(self, inter: Interaction, inp: str):
+        return [ext for ext in self.bot.extensions if inp.lower() in ext.lower()]
+
+    @reload_slash.error
+    @load_slash.error
+    @unload_slash.error
+    async def slash_ext_error(self, inter: Interaction, error):
+        await inter.send(
+            str(error),
+            ephemeral=True
+        )
         traceback.print_exc()
 
 

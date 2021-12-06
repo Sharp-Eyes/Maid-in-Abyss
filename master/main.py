@@ -27,8 +27,6 @@ load_dotenv()
 token = os.getenv("TOKEN")
 
 
-DEFAULT_PREFIX = ["."]
-
 intents = disnake.Intents.default()
 intents.members = True
 
@@ -36,17 +34,8 @@ intents.members = True
 def get_prefix(bot: CustomBot, msg: disnake.Message):
     """Return a message handler the correct prefix if in a guild or the default if in DMs."""
 
-    handle = commands.when_mentioned_or
-    guild = msg.guild
-
-    # DM:
-    if not guild:
-        return handle(*DEFAULT_PREFIX)(bot, msg)
-
-    # Guild:
-    # guild_data = bot["guilds"]
-    prefixes = DEFAULT_PREFIX  # guild_data.get(str(guild.id), "prefix", default=DEFAULT_PREFIX)
-    return handle(*prefixes)(bot, msg)
+    # Custom prefixes don't matter anymore, shifting to /commands anyways
+    return commands.when_mentioned_or(".")(bot, msg)
 
 
 if __name__ == "__main__":
@@ -54,12 +43,6 @@ if __name__ == "__main__":
         command_prefix=get_prefix,
         intents=intents,
     )
-
-    # @bot.event
-    # async def on_ready():
-    # print(f"\n\nLogged in as {bot.user.name} | disnake version {disnake.__version__}")
-
-    # Load or reload extensions, whichever is appropriate
     exceptions = 0
     for extension in search_all_extensions():
         try:

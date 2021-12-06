@@ -109,7 +109,7 @@ class HoyolabApiCog(commands.Cog):
         DiscordUserDataModel.bot = self.bot
 
         self.user_cache: list[DiscordUserDataModel] = []
-        async for user in self.bot.db.discord.users.find():
+        async for user in self.bot._motor.discord.users.find():
             try:
                 self.user_cache.append(DiscordUserDataModel(**user))
             except ValidationError:

@@ -186,7 +186,7 @@ class DiscordUserDataModel(PropagatingModel):
 
     async def commit(self):
         """Commit any changes made to the user by pushing to the database."""
-        result: UpdateResult = await self.bot.db.discord.users.update_one(
+        result: UpdateResult = await self.bot._motor.discord.users.update_one(
             {"_id": self.discord_id},
             {"$set": self.dict(by_alias=True)}
         )
@@ -200,7 +200,7 @@ class DiscordUserDataModel(PropagatingModel):
     async def create_new(cls, _id: int, hoyolab_data: HoyolabDataModel):
         """Create a new entry of user data, add it to the database, and set the database key."""
         new = cls(_id=_id, hoyolab=hoyolab_data)
-        result: InsertOneResult = await cls.bot.db.discord.users.insert_one(
+        result: InsertOneResult = await cls.bot._motor.discord.users.insert_one(
             new.dict(by_alias=True)
         )
         logger.log(

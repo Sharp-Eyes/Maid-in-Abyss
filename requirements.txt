@@ -2,3 +2,4 @@ disnake >= 2.2
 wikitextparser >= 0.47
 fuzzyset2 == 0.1.1
 pydantic >= 1.8.2
+odmantic == 0.3.5
