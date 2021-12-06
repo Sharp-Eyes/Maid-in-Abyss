@@ -27,7 +27,7 @@ class CoopSelect(Select):
         ]
 
         super().__init__(
-            placeholder=f"Please pick the {self.game} coop roles that apply to you.",
+            placeholder=f"{self.game} coop roles...",
             min_values=0,
             max_values=len(options),
             options=options,
@@ -156,36 +156,6 @@ class CoopView(View):
             self.add_item(HonkaiRemoveButton())
         if genshin:
             self.add_item(GenshinRemoveButton())
-
-    # @button(label="Remove all | Honkai", style=ButtonStyle.red, row=2, custom_id="HonkaiX")
-    # async def remove_all_honkai(self, button: disnake.Button, inter: MessageInteraction):
-    #     await inter.response.defer()
-    #     remove_roles = {
-    #         role
-    #         for role in inter.author.roles
-    #         if role.name in HonkaiSelect.role_names
-    #     }
-    #     await inter.author.remove_roles(*remove_roles)
-    #     await inter.send(
-    #         "Successfully removed all Honkai Impact coop roles:\n"
-    #         + CoopSelect.changelog(removed=remove_roles),
-    #         ephemeral=True
-    #     )
-
-    # @button(label="Remove all | Genshin", style=ButtonStyle.red, row=2, custom_id="GenshinX")
-    # async def remove_all_genshin(self, button: disnake.Button, inter: MessageInteraction):
-    #     await inter.response.defer()
-    #     remove_roles = {
-    #         role
-    #         for role in inter.author.roles
-    #         if role.name in GenshinSelect.role_names
-    #     }
-    #     await inter.author.remove_roles(*remove_roles)
-    #     await inter.send(
-    #         "Successfully removed all Genshin Impact coop roles:\n"
-    #         + CoopSelect.changelog(removed=remove_roles),
-    #         ephemeral=True
-    #     )
 
 
 class CoopCog(commands.Cog):
