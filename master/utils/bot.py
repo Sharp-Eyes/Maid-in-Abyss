@@ -21,7 +21,7 @@ reload_logger = logging.getLogger("reload")
 reload_logger.setLevel(logging.DEBUG)
 
 
-__all__ = "CustomBot" "FullReloadCog"
+__all__ = ("CustomBot",)
 
 
 load_dotenv()
@@ -185,7 +185,7 @@ class CustomBot(commands.Bot):
     async def close(self):
         await self.session.close()
         await self.db.close()
-        return await super().close()
+        await super().close()
 
     def _reload_submodules(self, lib: ModuleType) -> None:
         """Atomically reloads all 'custom' submodules of a given module."""
