@@ -1,4 +1,4 @@
-from .wiki import WikiCog# , # setup
+from .wiki import WikiCog
 from utils.bot import CustomBot
 
 def setup(bot: CustomBot):

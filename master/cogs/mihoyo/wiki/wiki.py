@@ -188,7 +188,3 @@ class WikiCog(commands.Cog):
             visualize_match(title, match): title
             for _, match, title in sorted(fuzzy_result)[:20]
         }
-
-
-def setup(bot: CustomBot):
-    bot.add_cog(WikiCog(bot))
