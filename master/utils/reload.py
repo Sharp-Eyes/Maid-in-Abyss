@@ -11,6 +11,7 @@ __all__ = [
     "is_custom_module",
     "walk_module_imports",
     "linearize_imports",
+    "reload_child_modules",
 ]
 
 logger = logging.getLogger("reload")
