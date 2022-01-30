@@ -9,7 +9,7 @@ import sys
 import traceback
 from dotenv import load_dotenv
 from utils.bot import CustomBot
-from utils.helpers import search_all_extensions
+from utils.helpers import walk_modules
 
 logging.basicConfig(level=logging.NOTSET)
 
@@ -30,27 +30,24 @@ intents = disnake.Intents.default()
 intents.members = True
 
 
-def get_prefix(bot: CustomBot, msg: disnake.Message):
-    """Return a message handler the correct prefix if in a guild or the default if in DMs."""
-
-    # Custom prefixes don't matter anymore, shifting to /commands anyways
-    return commands.when_mentioned_or(".")(bot, msg)
-
-
 if __name__ == "__main__":
     bot = CustomBot(
-        command_prefix=get_prefix,
+        command_prefix=commands.when_mentioned_or("."),
         intents=intents,
+        help_command=None
     )
+    bot.load_extension("jishaku")
     exceptions = 0
-    for extension in search_all_extensions():
+    for module in walk_modules("cogs", start="master"):
+        if "__" in module:  # TODO: delete dunder modules
+            continue
         try:
-            bot.load_extension(extension)
-            print(f"> Successfully loaded extension {extension}!")
+            bot.load_extension(module)
+            print(f"> Successfully loaded extension {module}!")
 
         except (ExtensionError, Exception) as e:
             exceptions += 1
-            print(f"> Failed to load extension {extension}: {e}.", file=sys.stderr)
+            print(f"> Failed to load extension {module}: {e}.", file=sys.stderr)
             traceback.print_exc()
 
     print(f"\n> Encountered {exceptions} exceptions in loading cogs.\n")

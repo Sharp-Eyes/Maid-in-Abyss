@@ -2,9 +2,9 @@ env
 .env
 experimental
 legacy
-master/private.json
-master/guild_data.json
-master/user_data.json
+
 \__pycache__*
-notes.txt
 .vscode
+notes.txt
+
+master/cogs/test.py

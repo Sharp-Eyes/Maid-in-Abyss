@@ -3,23 +3,23 @@ from __future__ import annotations
 from disnake import ApplicationCommandInteraction as Interaction
 from disnake.ext import commands
 
-from typing import Callable, Type, TypeVar
-from models.wiki import QueryPage  # TODO: remove
-from models.wiki import (
-    BattlesuitModel,
-    ContentResponseModel,
-    QueryResponse,
-    StigmataSetModel,
-    ValidCategory,
-    WeaponModel,
-)
+import typing as t
+from models.wiki import WeaponModel  # TODO: Remove when wiki updates
 from utils.bot import CustomBot
+from utils.helpers import fuzzy_scored
+
+from .display import prettify_battlesuit, prettify_stigmata
+from .models import (
+    Battlesuit,
+    ContentResponse,
+    QueryResponse,
+    ResponseModelT,
+    StigmataSet,
+    ValidCategory,
+)
 
 BASE_WIKI_URL = "https://honkaiimpact3.fandom.com/"
 BASE_API_URL = "https://honkaiimpact3.fandom.com/api.php?"
-
-
-ResponseModel = TypeVar("ResponseModel")
 
 
 # Cog
@@ -28,43 +28,19 @@ ResponseModel = TypeVar("ResponseModel")
 class WikiCog(commands.Cog):
     def __init__(self, bot: CustomBot):
         self.bot = bot
+        self.wiki_cache: QueryResponse
 
     async def cog_load(self):
-        await self.bot.wait_until_ready()
+        await self.bot.wait_until_first_connect()  # ensure we have a session
         print("loading")
         await self.populate_wiki_cache()
-
         print("dunzo'd")
-
-    async def populate_wiki_cache(self) -> None:
-        params = {
-            "action": "query",
-            "format": "json",
-            "prop": "categories|redirects",
-            "generator": "categorymembers",
-            "cllimit": "max",
-            "clcategories": "|".join(cat.value for cat in ValidCategory),
-            "rdprop": "title",
-            "rdlimit": "max",
-            "gcmtitle": "Category:Stigmata",
-            "gcmlimit": "max",
-        }
-
-        for i, cat in enumerate(["Category:Stigmata", "Category:Battlesuits", "Category:Weapons"]):
-            _params = params.copy()
-            _params.update(gcmtitle=cat)
-            if not i:
-                result = await self.API_request(_params, QueryResponse)
-            else:
-                result.update(await self.API_request(_params, QueryResponse))
-
-        self.bot.wiki_cache = result
 
     async def API_request(
         self,
         params: dict[str, str],
-        response_model: Type[ResponseModel] | Callable[..., ResponseModel],
-    ) -> ResponseModel:
+        response_model: t.Type[ResponseModelT],
+    ) -> ResponseModelT:
         async with self.bot.session.get(BASE_API_URL, params=params) as resp:
             data = await resp.json()
         result = response_model(**data)
@@ -79,6 +55,30 @@ class WikiCog(commands.Cog):
 
         return result
 
+    async def populate_wiki_cache(self) -> None:
+        params = {
+            "action": "query",
+            "format": "json",
+            "prop": "categories|redirects",
+            "generator": "categorymembers",
+            "cllimit": "max",
+            "clcategories": "|".join(cat.value for cat in ValidCategory),
+            "rdprop": "title",
+            "rdlimit": "max",
+            "gcmlimit": "max",
+        }
+
+        for i, cat in enumerate(["Category:Stigmata", "Category:Battlesuits", "Category:Weapons"]):
+            _params = params.copy()
+            _params.update(gcmtitle=cat)
+
+            if not i:
+                result = await self.API_request(_params, QueryResponse)
+            else:
+                result.update(await self.API_request(_params, QueryResponse))
+
+        self.wiki_cache = result
+
     @commands.command(name="reloadwikicache")
     async def _reloadwikicache(self, ctx):
         await self.populate_wiki_cache()
@@ -90,7 +90,16 @@ class WikiCog(commands.Cog):
     )
     async def wiki(self, inter: Interaction, query: str):
         await inter.response.defer()
-        page: QueryPage = self.bot.wiki_cache.get(query)
+
+        page = self.wiki_cache.get(query)
+        if not page:
+            # mobile users can send without picking an autocomplete option
+            corrected: dict[str, str] = self.wiki_query_autocomp(None, query)
+            corrected_name = next(iter(corrected.values()))
+            page = self.wiki_cache.get(corrected_name)  # assume top result
+
+        if not page:
+            raise KeyError(f"No page could be found by the name of {corrected_name}.")
 
         page_params = {
             "action": "query",
@@ -100,7 +109,7 @@ class WikiCog(commands.Cog):
             "rvprop": "content",
             "rvslots": "main",
         }
-        content = await self.API_request(page_params, ContentResponseModel)
+        content = await self.API_request(page_params, ContentResponse)
 
         if page.categories.intersection(
             {
@@ -111,7 +120,8 @@ class WikiCog(commands.Cog):
                 ValidCategory.IMG,
             }
         ):
-            wiki_result = BattlesuitModel(content=content)
+            battlesuit = Battlesuit(**content.pages[0].data)
+            embeds = prettify_battlesuit(battlesuit)
 
         elif page.categories.intersection(
             {
@@ -122,9 +132,8 @@ class WikiCog(commands.Cog):
                 ValidCategory.STIGMA5,
             }
         ):
-            wiki_result = StigmataSetModel(
-                stigs=dict.fromkeys(("T", "M", "B"), page.title), content=content
-            )
+            stigmata_set = StigmataSet(**content.pages[0].data)
+            embeds = prettify_stigmata(stigmata_set)
 
         elif page.categories.intersection(
             {
@@ -139,8 +148,11 @@ class WikiCog(commands.Cog):
                 ValidCategory.BOW,
             }
         ):
-            data = content.highest_rarity_by_name(page.title).data
-            wiki_result = WeaponModel(**data)
+            # Old implementation(ish) as weapon pages haven't been updated yet
+            # TODO: replace with new implementation when they get updated, delete old wiki model file
+            content_page = max(content.pages, key=lambda page: int(page.data.get("rarity", 0)))
+            wiki_result = WeaponModel(**content_page.data)
+            embeds = wiki_result.to_embed()
 
         else:
             await inter.edit_original_message(
@@ -150,12 +162,32 @@ class WikiCog(commands.Cog):
             )
             return
 
-        await inter.edit_original_message(embeds=wiki_result.to_embed())
+        await inter.edit_original_message(embeds=embeds)
 
     @wiki.autocomplete("query")
     async def wiki_query_autocomp(self, inter: Interaction, inp: str):
-        # TODO: Match by longest substring first; fuzzy only if no results are found.
-        return self.bot.wiki_cache.fuzzy(inp)
+
+        def visualize_match(title: str, match: str) -> str:
+            return title if title == match else f"{title} ({match})"
+
+        fuzzy_result: list[tuple[int, str, str]] = []
+        pages = self.wiki_cache.pages.copy()
+        for strict in (True, False):
+            for page_name, page in pages.items():
+                page_best_match = fuzzy_scored(inp, page.all_names, strict=strict, n=1)
+                if page_best_match:
+                    fuzzy_result.append(page_best_match[0] + (page_name,))
+
+            if len(fuzzy_result) >= 20 or not strict:
+                break
+
+            for _, _, title in fuzzy_result:
+                pages.pop(title)
+
+        return {
+            visualize_match(title, match): title
+            for _, match, title in sorted(fuzzy_result)[:20]
+        }
 
 
 def setup(bot: CustomBot):
